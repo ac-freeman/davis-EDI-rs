@@ -1,0 +1,5 @@
+args_filename = ""
+base_path = "./dataset/"
+events_filename = "dvSave-2022_05_17_14_48_18.aedat4"
+show_display = 1
+output_fps = 200
