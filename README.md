@@ -22,3 +22,5 @@ There are some major things left before I can start implementing mEDI. Any assis
 - Cargo
 - OpenCV and its Rust bindings (installation instructions [here](https://github.com/twistedfall/opencv-rust))
 - Other dependencies will download and install automatically when building with Cargo
+
+![](https://github.com/ac-freeman/davis-EDI-rs/blob/main/demo.gif)
