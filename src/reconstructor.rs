@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::path::Path;
 use aedat::base::{Packet, ParseError, Stream};
-use opencv::core::{CV_64F, CV_8S, CV_8U, Mat, MatExprTraitConst, MatTrait, MatTraitConst, MatTraitManual, Size};
+use opencv::core::{CV_64F, CV_8S, CV_8U, Mat, MatExprTraitConst, MatTrait, MatTraitConst, MatTraitManual, NORM_MINMAX, Size};
 use opencv::highgui;
 use opencv::imgproc::resize;
 use crate::event_adder::{BlurInfo, EventAdder};
@@ -122,7 +122,7 @@ impl Reconstructor {
                             }
                         }
 
-                        show_display_force("blurred input", &(self.event_adder.blur_info.blurred_image.clone() /255.0).into_result().unwrap().to_mat().unwrap(), 1);
+                        show_display_force("blurred input", &(self.event_adder.blur_info.blurred_image.clone() /255.0).into_result().unwrap().to_mat().unwrap(), 1, false);
                         return
                     }
                     else if p.stream_id == aedat::base::StreamContent::Events as u32 {
@@ -260,13 +260,17 @@ pub fn show_display(window_name: &str, mat: &Mat, wait: i32, reconstructor: &Rec
 }
 
 /// TODO: Remove. Just for debugging.
-pub fn show_display_force(window_name: &str, mat: &Mat, wait: i32) {
+pub fn show_display_force(window_name: &str, mat: &Mat, wait: i32, normalize: bool) {
+    let mut normed = mat.clone();
     let mut tmp = Mat::default();
+    if normalize {
+        opencv::core::normalize(&mat, &mut normed, 0.0, 1.0, NORM_MINMAX, -1, &opencv::core::no_array());
+    }
 
     if mat.rows() != 540 {
         let factor = mat.rows() as f32 / 540.0;
         resize(
-            mat,
+            &normed,
             &mut tmp,
             Size {
                 width: (mat.cols() as f32 / factor) as i32,
