@@ -346,7 +346,7 @@ impl EventAdder {
         let edge_thinned = tup1.1;
 
 
-        let (mut min_c, mut max_c, n_points) = (0.0, 0.5, 60);
+        let (mut min_c, mut max_c, n_points) = (self.current_c - 0.05, self.current_c + 0.05, 60);
         let (mut energy1, mut energy2, mut c1, mut c2) = (0.0, 0.0, 0.0, 0.0);
         let (mut latent1, mut latent2) = (Mat::default(), Mat::default());
 
