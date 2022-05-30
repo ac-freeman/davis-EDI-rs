@@ -415,7 +415,7 @@ impl EventAdder {
             }
             a => { a }
         };
-        let n_points =  60;
+        let n_points =  30;
         let (mut energy1, mut energy2, mut c1, mut c2) = (0.0, 0.0, 0.0, 0.0);
         let (mut latent1, mut latent2) = (Mat::default(), Mat::default());
 
@@ -525,7 +525,7 @@ impl EventAdder {
 
         // Assume for now that lambda = 0.2 (TODO)
         let energy = -0.004*tv - sharpness as f64;
-        println!("c {}, tv {}, Sharpness {}, energy {}", c_threshold, tv, sharpness, energy);
+        // println!("c {}, tv {}, Sharpness {}, energy {}", c_threshold, tv, sharpness, energy);
         // assert!(energy >= 0.0);
         (energy, self.latent_image.clone())
     }

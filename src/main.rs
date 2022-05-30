@@ -68,7 +68,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                 // Iterate through images by pressing a key on keyboard. To iterate automatically,
                 // change `wait` to 1
-                show_display("RETURNED", &mat_8u, 0, &reconstructor);
+                show_display("RETURNED", &mat_8u, 1, &reconstructor);
             }
         }
     }

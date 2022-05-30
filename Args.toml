@@ -1,8 +1,7 @@
 args_filename = ""
-base_path = "/home/andrew/Documents/DynamicVision/"
-events_filename = "dvSave-2022_05_16_15_33_48.aedat4"
-#events_filename = "dvSave-2022_05_17_14_48_18.aedat4"
+base_path = "./dataset/"
+events_filename = "dvSave-2022_05_17_14_48_18.aedat4"
 start_c = 0.28
-optimize_c = 0
+optimize_c = 1
 show_display = 1
 output_fps = 200
