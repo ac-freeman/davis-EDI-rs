@@ -45,6 +45,9 @@ impl BlurInfo {
                 width: i32,
                 intervals_popped: i32,
     ) -> BlurInfo {
+
+        let beg = exposure_begin_t - t_shift;
+        let end = exposure_end_t - t_shift;
         let begin_bookend = BlurryBookend {
             output_interval_idx: ((exposure_begin_t - t_shift) / interval_t) as usize,
             interval_timestamp: (exposure_begin_t - t_shift) % interval_t,
@@ -59,7 +62,8 @@ impl BlurInfo {
             nonimage_accumulated_events: Mat::zeros(height, width, CV_64F).unwrap().to_mat().unwrap(),
         };
 
-        let mid_idx = (end_bookend.output_interval_idx - begin_bookend.output_interval_idx)/2 + 1 + intervals_popped as usize;
+        let mid_idx = (end_bookend.output_interval_idx - begin_bookend.output_interval_idx)/2 + begin_bookend.output_interval_idx + 1;
+
 
         BlurInfo {
             blurred_image: image,
@@ -271,14 +275,26 @@ impl EventAdder {
 
         // Then add it to its regular interval
         let interval = &mut self.event_intervals[interval_idx - self.intervals_popped as usize];
-        add_to_event_counter(&mut interval.e_accumuluator, event);
+
+        // If we have sharp input images, and this event occurs during the image exposure, then
+        // don't actually do anything with it
+        if !(self.blur_info.init
+            && self.blur_info.begin_bookend.output_interval_idx >= self.blur_info.end_bookend.output_interval_idx - 1
+            && event.t() > self.blur_info.exposure_begin_t
+            && event.t() <= self.blur_info.exposure_end_t) {
+            add_to_event_counter(&mut interval.e_accumuluator, event);
+        }
         return
     }
 
     fn deblur_image(&mut self, c_threshold: f64) {
-        if self.blur_info.end_bookend.output_interval_idx == self.blur_info.begin_bookend.output_interval_idx + 1 {
-            self.blur_info.mid_idx = self.intervals_popped as usize;
+        // If APS image is sharp, then just take the log of it
+        if self.blur_info.begin_bookend.output_interval_idx >= self.blur_info.end_bookend.output_interval_idx - 1 {
+            let mut log_b = self.make_log(&self.blur_info.blurred_image);
+            self.latent_image = log_b;
+            return;
         }
+
 
         self.sum_mat = Mat::zeros(self.height as i32, self.width as i32, CV_64F).unwrap().to_mat().unwrap();
         let mut temp_exp = Mat::default();
@@ -300,6 +316,7 @@ impl EventAdder {
         let interval = &mut self.event_intervals[self.blur_info.begin_bookend.output_interval_idx as usize - self.intervals_popped as usize];
         interval.c_accumuluator =
             (&interval.e_accumuluator * &c_threshold).into_result().unwrap().to_mat().unwrap();
+        show_display_force("c_accum", &interval.c_accumuluator, 0, true);
         c_sum = (c_sum - &interval.c_accumuluator).into_result().unwrap().to_mat().unwrap();
         exp(&c_sum, &mut temp_exp).unwrap();
         let proportion1 = (self.interval_t - self.blur_info.begin_bookend.interval_timestamp) as f64 / self.interval_t as f64;
