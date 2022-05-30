@@ -30,7 +30,7 @@ pub struct Reconstructor {
 }
 
 impl Reconstructor {
-    pub fn new(directory: String, aedat_filename: String, display: bool, output_fps: f64) -> Reconstructor {
+    pub fn new(directory: String, aedat_filename: String, start_c: f64, optimize_c: bool, display: bool, output_fps: f64) -> Reconstructor {
         let mut aedat_decoder = aedat::base::Decoder::new(Path::new(&(directory.to_owned() + "/" + &aedat_filename))).unwrap();
         let (height, width) = split_camera_info(&aedat_decoder.id_to_stream[&0]);
 
@@ -77,7 +77,7 @@ impl Reconstructor {
             packet_queue,
             t_shift,
             output_frame_length,
-            event_adder: EventAdder::new(height as usize, width as usize, t_shift, output_frame_length),
+            event_adder: EventAdder::new(height as usize, width as usize, t_shift, output_frame_length, start_c, optimize_c),
             latent_image_queue: VecDeque::new(),
         };
 
