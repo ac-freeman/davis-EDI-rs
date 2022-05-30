@@ -213,11 +213,12 @@ impl Iterator for Reconstructor {
                 match self.latent_image_queue.pop_front() {
                     None => { panic!("No images in the returned queue")}
                     Some(image) => {
+
+                        // TODO: Split this off so that it can execute in its own thread.
+                        // After reaching this point, immediately call it again in thread (maybe
+                        // a few times?), so that it runs in the background. This will help hide
+                        // the latency
                         self.fill_packet_queue_to_frame();
-                        // let start_t = self.current_blurred_image.exposure_begin_t - self.t_shift;
-                        // let interval_t = (self.current_blurred_image.exposure_end_t - self.current_blurred_image.exposure_begin_t) / self.frame_exp_divisor;
-                        // let end_t = interval_t + start_t;
-                        // self.event_adder.reset(start_t, interval_t, end_t);
                         return Some(Ok(image))}
                 }
 

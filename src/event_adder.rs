@@ -144,21 +144,6 @@ impl EventAdder {
         self.return_queue.push_back(l.clone());
     }
 
-    /// to do: need separate notion of blurred intervals for the starting and ending of blurred image.
-    /// Have one big vecdequeue of event accumulator intervals. Each item holds the output frame index
-    /// and the accumulated event array.
-    /// Have struct members blurry_interval_start, blurry_interval_end. Each is a BlurryBookend
-    /// BlurryBookend {
-    ///     output_interval_idx: i64, // corresponding output_interval
-    ///     image_accumulated_events
-    ///     nonimage_accumulated_events // events during this interval which are not during the blurry image exposure time
-    ///     interval_timestamp      // at what point in the interval does the image start (or end)
-    /// }
-    ///
-    /// The T for getting the starting latent image:
-    /// T = non_bookend_interval_count +
-    ///     ((t_shift - blurry_interval_start.interval_timestamp) + blurry_interval_end.interval_timestamp) / t_shift
-
     pub fn add_events(&mut self, packet: Packet, current_blurred_image: &mut BlurredInput) -> Option<VecDeque<Mat>> {
         if self.event_intervals.len() == 0 {
             self.push_interval();
@@ -295,7 +280,6 @@ impl EventAdder {
             return;
         }
 
-
         self.sum_mat = Mat::zeros(self.height as i32, self.width as i32, CV_64F).unwrap().to_mat().unwrap();
         let mut temp_exp = Mat::default();
 
@@ -316,7 +300,6 @@ impl EventAdder {
         let interval = &mut self.event_intervals[self.blur_info.begin_bookend.output_interval_idx as usize - self.intervals_popped as usize];
         interval.c_accumuluator =
             (&interval.e_accumuluator * &c_threshold).into_result().unwrap().to_mat().unwrap();
-        // show_display_force("c_accum", &interval.c_accumuluator, 0, true);
         c_sum = (c_sum - &interval.c_accumuluator).into_result().unwrap().to_mat().unwrap();
         exp(&c_sum, &mut temp_exp).unwrap();
         let proportion1 = (self.interval_t - self.blur_info.begin_bookend.interval_timestamp) as f64 / self.interval_t as f64;
@@ -329,7 +312,6 @@ impl EventAdder {
         if self.blur_info.begin_bookend.output_interval_idx != self.blur_info.end_bookend.output_interval_idx - 1 {
             for i in self.blur_info.mid_idx..self.blur_info.end_bookend.output_interval_idx {
                 let interval = &mut self.event_intervals[i as usize - self.intervals_popped as usize];
-                // assert_eq!(interval.idx, (self.blur_info.begin_bookend.output_interval_idx + i) as i32);
                 interval.c_accumuluator =
                     (&interval.e_accumuluator * &c_threshold).into_result().unwrap().to_mat().unwrap();
                 c_sum = (c_sum + &interval.c_accumuluator).into_result().unwrap().to_mat().unwrap();
@@ -356,8 +338,6 @@ impl EventAdder {
 
         let mut log_l = (log_b - log_sub).into_result().unwrap().to_mat().unwrap();
         self.latent_image = log_l.clone();
-
-        // show_display_force("latent1", &self.latent_image, 0, true );
 
         let mut l = Mat::default();
         exp(&log_l, &mut l).unwrap();
@@ -398,10 +378,8 @@ impl EventAdder {
     }
 
     fn optimize_c(&mut self) {
-
         let tup1 = self.get_gradient_magnitude(&self.edge_boundary);
         let edge_thinned = tup1.1;
-
 
         let mut min_c = match self.current_c - 0.05 {
             a if a <= 0.1 => {
@@ -420,9 +398,6 @@ impl EventAdder {
         let (mut latent1, mut latent2) = (Mat::default(), Mat::default());
 
         let mut cec_norm = Mat::default();
-
-        // Uncomment the lines below to use the optimized c search. NOT currently yielding good
-        // results!
 
         // create fibonacci sequence
         let mut fib = vec![1.0; 22];
@@ -444,12 +419,10 @@ impl EventAdder {
                     (a, b) => { energy1 = a; latent1 = b; }
                 };
                 opencv::core::normalize(&latent1, &mut cec_norm, 0.0, 1.0, NORM_MINMAX, -1, &opencv::core::no_array());
-                // show_display_force("latent1", &cec_norm, 1);
                 match self.get_energy(c2, &edge_thinned) {
                     (a, b) => { energy2 = a; latent2 = b; }
                 }
                 opencv::core::normalize(&latent2, &mut cec_norm, 0.0, 1.0, NORM_MINMAX, -1, &opencv::core::no_array());
-                // show_display_force("latent2", &cec_norm, 0);
             }
             if energy1 < energy2 {
                 max_c = c2;
@@ -461,7 +434,6 @@ impl EventAdder {
                     (a, b) => { energy1 = a; latent1 = b; }
                 };
                 opencv::core::normalize(&latent1, &mut cec_norm, 0.0, 1.0, NORM_MINMAX, -1, &opencv::core::no_array());
-                // show_display_force("latent1", &cec_norm, 0);
             } else {
                 min_c = c1;
                 c1 = c2;
@@ -472,7 +444,6 @@ impl EventAdder {
                     (a, b) => { energy2 = a; latent2 = b; }
                 };
                 opencv::core::normalize(&latent2, &mut cec_norm, 0.0, 1.0, NORM_MINMAX, -1, &opencv::core::no_array());
-                // show_display_force("latent2", &cec_norm, 0);
             }
         }
         if energy1 < energy2 {
@@ -483,17 +454,6 @@ impl EventAdder {
             self.latent_image = latent2;
         }
         println!("Optimal c is: {}", self.current_c);
-
-        opencv::core::normalize(
-            &self.latent_image,
-            &mut cec_norm,
-            0.0,
-            1.0,
-            NORM_MINMAX,
-            -1,
-            &opencv::core::no_array(),
-        ).unwrap();
-        // show_display_force("LATENT", &cec_norm, 0, false);
     }
 
     fn get_energy(&mut self, c_threshold: f64, edge_thinned: &Mat) -> (f64, Mat) {
@@ -523,18 +483,14 @@ impl EventAdder {
             }
         }
 
-        // Assume for now that lambda = 0.2 (TODO)
         let energy = -0.004*tv - sharpness as f64;
         // println!("c {}, tv {}, Sharpness {}, energy {}", c_threshold, tv, sharpness, energy);
-        // assert!(energy >= 0.0);
         (energy, self.latent_image.clone())
     }
 
     fn get_gradient_magnitude(&self, mat: &Mat) -> (Mat, Mat) {
         let mut max = 0.0;
         min_max_idx(&mat, None, Some(&mut max), None, None, &no_array()).unwrap();
-
-        // show_display_force("mat", &mat, 0, false);
 
         let mut sobel_dx = Mat::default();
         let mut sobel_dy = Mat::default();
@@ -546,14 +502,11 @@ impl EventAdder {
         let sobel_dy_sq = sobel_dy.clone().elem_mul(sobel_dy.clone()).into_result().unwrap().to_mat().unwrap();
         let sum_sq = (&sobel_dx_sq + &sobel_dy_sq).into_result().unwrap().to_mat().unwrap();
         sqrt(&sum_sq, &mut grad).unwrap();    // This is the gradient magnitude image
-        // show_display_force("grad mag", &grad, 0, true);
         let grad_mag = grad.clone();
 
 
         // Try replicating code from https://stackoverflow.com/questions/49725744/what-is-the-opencv-equivalent-of-this-matlab-code-for-sobel-edge-detection
         let ang = self.get_ang(&sobel_dy, &sobel_dx);
-        // let fudgefactor = 0.5;
-
         let threshold_val = 4.0 * mean(&grad, &no_array()).unwrap().0[0];
 
         for i in 0..self.height as i32 {
@@ -564,18 +517,9 @@ impl EventAdder {
                 }
             }
         }
-
-        // show_display_force("before suppressed", &grad, 1, true);
-        // TODO: do non-maximal suppression
         self.orientated_non_max_suppression(&mut grad, &ang);
-        // show_display_force("suppressed", &grad, 1, true);
-
-
-
         let mut thresholded = Mat::default();
         threshold(&grad, &mut thresholded, 0.0, 1.0, THRESH_BINARY).unwrap();
-        // show_display_force("threshh", &thresholded, 0, false);
-
 
         (grad_mag, thresholded)
     }
@@ -687,7 +631,7 @@ impl EventAdder {
             let subset = (eroded - opened).into_result().unwrap().to_mat().unwrap();
             bitwise_or(&subset, &thinned.clone(), &mut thinned, &no_array()).unwrap();
         }
-        // show_display_force("thinned", &thinned, 1);
+
         thinned
     }
 
@@ -696,9 +640,6 @@ impl EventAdder {
     fn add_to_edge_boundary(&mut self, event: &Event) {
         let px: &mut f64 = self.edge_boundary.at_2d_mut(event.y() as i32, event.x() as i32).unwrap();
         let mid_t = (self.blur_info.mid_idx * self.interval_t as usize) as i64;
-        let t0 = event.t() - self.t_shift;
-        let t = (mid_t - (event.t() - self.t_shift)) as f64;
-        let t2 = t / self.interval_t as f64;
 
         let inner = match (mid_t - (event.t() - self.t_shift)) as f64 / self.interval_t as f64 {
             a if a > 0.0 => { -a }
@@ -709,9 +650,6 @@ impl EventAdder {
             true => { outer }
             false => { -outer }
         };
-        // if self.event_count % 100 == 0 {
-        //     show_display_force("temp edge", &self.edge_boundary, 1, true);
-        // }
     }
 }
 
