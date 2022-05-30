@@ -1,8 +1,9 @@
 use std::collections::VecDeque;
+use std::f64::consts::PI;
 use aedat::base::Packet;
 use aedat::events_generated::Event;
-use opencv::core::{bitwise_or, BORDER_DEFAULT, count_non_zero, CV_64F, ElemMul, exp, log, Mat, MatExprTraitConst, MatTrait, MatTraitConst, min_max_idx, no_array, NORM_MINMAX, Point, Size, sqrt, sum_elems};
-use opencv::imgproc::{erode, get_structuring_element, MORPH_CROSS, MORPH_OPEN, morphology_ex, sobel, THRESH_BINARY, threshold};
+use opencv::core::{abs, bitwise_or, BORDER_DEFAULT, count_non_zero, CV_64F, CV_8U, ElemMul, exp, log, Mat, MatExprTraitConst, MatTrait, MatTraitConst, max, mean, min_max_idx, no_array, NORM_MINMAX, Point, Point_, Size, sqrt, sum_elems};
+use opencv::imgproc::{dilate, erode, get_structuring_element, MORPH_CROSS, MORPH_OPEN, MORPH_RECT, morphology_ex, sobel, THRESH_BINARY, threshold};
 use crate::reconstructor::{BlurredInput, show_display_force};
 
 #[derive(Default)]
@@ -44,6 +45,9 @@ impl BlurInfo {
                 width: i32,
                 intervals_popped: i32,
     ) -> BlurInfo {
+
+        let beg = exposure_begin_t - t_shift;
+        let end = exposure_end_t - t_shift;
         let begin_bookend = BlurryBookend {
             output_interval_idx: ((exposure_begin_t - t_shift) / interval_t) as usize,
             interval_timestamp: (exposure_begin_t - t_shift) % interval_t,
@@ -58,7 +62,8 @@ impl BlurInfo {
             nonimage_accumulated_events: Mat::zeros(height, width, CV_64F).unwrap().to_mat().unwrap(),
         };
 
-        let mid_idx = (end_bookend.output_interval_idx - begin_bookend.output_interval_idx)/2 + 1 + intervals_popped as usize;
+        let mid_idx = (end_bookend.output_interval_idx - begin_bookend.output_interval_idx)/2 + begin_bookend.output_interval_idx + 1;
+
 
         BlurInfo {
             blurred_image: image,
@@ -88,10 +93,12 @@ pub struct EventAdder {
     pub next_blur_info: BlurInfo,
     edge_boundary: Mat,
     current_c: f64,
+    optimize_c: bool,
+    event_count: i64, // TODO: for debuggin only
 }
 
 impl EventAdder {
-    pub fn new(height: usize, width:usize, t_shift: i64, output_frame_length: i64) -> EventAdder {
+    pub fn new(height: usize, width:usize, t_shift: i64, output_frame_length: i64, start_c: f64, optimize_c: bool) -> EventAdder {
         EventAdder {
             t_shift,
             interval_t: output_frame_length,
@@ -106,7 +113,9 @@ impl EventAdder {
             blur_info: Default::default(),
             next_blur_info: Default::default(),
             edge_boundary: Mat::zeros(height as i32, width as i32, CV_64F).unwrap().to_mat().unwrap(),
-            current_c: 0.3,
+            current_c: start_c,
+            optimize_c,
+            event_count: 0,
         }
     }
     fn push_interval(&mut self) {
@@ -179,6 +188,7 @@ impl EventAdder {
     }
 
     fn process_event(&mut self, event: &Event) {
+        self.event_count += 1;
         if event.t() < self.t_shift {
             return;
         }
@@ -223,7 +233,12 @@ impl EventAdder {
                     }
                     assert_eq!(self.event_intervals[0].idx as usize, self.blur_info.begin_bookend.output_interval_idx);
                     // self.deblur_image();
-                    self.optimize_c();
+
+                    match self.optimize_c {
+                        true => { self.optimize_c(); }
+                        _ => { self.deblur_image(self.current_c);}
+                    }
+
 
                     // First, get the return images from the backwards direction of the middle of the blurry image
                     let mut temp_latent_image = self.latent_image.clone();
@@ -260,14 +275,26 @@ impl EventAdder {
 
         // Then add it to its regular interval
         let interval = &mut self.event_intervals[interval_idx - self.intervals_popped as usize];
-        add_to_event_counter(&mut interval.e_accumuluator, event);
+
+        // If we have sharp input images, and this event occurs during the image exposure, then
+        // don't actually do anything with it
+        if !(self.blur_info.init
+            && self.blur_info.begin_bookend.output_interval_idx >= self.blur_info.end_bookend.output_interval_idx - 1
+            && event.t() > self.blur_info.exposure_begin_t
+            && event.t() <= self.blur_info.exposure_end_t) {
+            add_to_event_counter(&mut interval.e_accumuluator, event);
+        }
         return
     }
 
     fn deblur_image(&mut self, c_threshold: f64) {
-        if self.blur_info.end_bookend.output_interval_idx == self.blur_info.begin_bookend.output_interval_idx + 1 {
-            self.blur_info.mid_idx = self.intervals_popped as usize;
+        // If APS image is sharp, then just take the log of it
+        if self.blur_info.begin_bookend.output_interval_idx >= self.blur_info.end_bookend.output_interval_idx - 1 {
+            let mut log_b = self.make_log(&self.blur_info.blurred_image);
+            self.latent_image = log_b;
+            return;
         }
+
 
         self.sum_mat = Mat::zeros(self.height as i32, self.width as i32, CV_64F).unwrap().to_mat().unwrap();
         let mut temp_exp = Mat::default();
@@ -289,6 +316,7 @@ impl EventAdder {
         let interval = &mut self.event_intervals[self.blur_info.begin_bookend.output_interval_idx as usize - self.intervals_popped as usize];
         interval.c_accumuluator =
             (&interval.e_accumuluator * &c_threshold).into_result().unwrap().to_mat().unwrap();
+        // show_display_force("c_accum", &interval.c_accumuluator, 0, true);
         c_sum = (c_sum - &interval.c_accumuluator).into_result().unwrap().to_mat().unwrap();
         exp(&c_sum, &mut temp_exp).unwrap();
         let proportion1 = (self.interval_t - self.blur_info.begin_bookend.interval_timestamp) as f64 / self.interval_t as f64;
@@ -323,24 +351,71 @@ impl EventAdder {
         self.sum_mat = exp_sum;
         self.sum_mat = (self.sum_mat.clone() / interval_count).into_result().unwrap().to_mat().unwrap();
 
-        let mut log_sub = Mat::default();
-        log(&self.sum_mat, &mut log_sub).unwrap();
+        let mut log_sub = self.make_log(&self.sum_mat);
+        let mut log_b = self.make_log(&self.blur_info.blurred_image);
 
-        let mut log_b = Mat::default();
-        log(&self.blur_info.blurred_image, &mut log_b).unwrap();
-
-        let log_l = (log_b - log_sub).into_result().unwrap().to_mat().unwrap();
+        let mut log_l = (log_b - log_sub).into_result().unwrap().to_mat().unwrap();
         self.latent_image = log_l.clone();
+
+        // show_display_force("latent1", &self.latent_image, 0, true );
 
         let mut l = Mat::default();
         exp(&log_l, &mut l).unwrap();
     }
 
+    fn make_log(&self, mat: &Mat) -> Mat {
+        let mut log_mat = Mat::zeros(self.height as i32, self.width as i32, CV_64F).unwrap().to_mat().unwrap();
+        for i in 0..self.height as i32 {
+            for j in 0..self.width as i32 {
+                let px = mat.at_2d::<f64>(i, j).unwrap();
+                let log_px = log_mat.at_2d_mut::<f64>(i, j).unwrap();
+                *log_px = match px.ln() {
+                    a if a == f64::NEG_INFINITY => {
+                        0.0
+                    }
+                    a if a == f64::INFINITY => {
+                        panic!("Positive infinity value")
+                    }
+                    a => { a }
+                };
+            }
+        }
+        log_mat
+    }
+
+    fn clean_inf(&self, mat: &mut Mat) {
+        for i in 0..self.height as i32 {
+            for j in 0..self.width as i32 {
+                let px = mat.at_2d_mut::<f64>(i, j).unwrap();
+                if *px == f64::NEG_INFINITY {
+                    *px = 0.0;
+                }
+                else if *px == f64::INFINITY {
+                    panic!("Positive infinity value")
+                }
+            }
+        }
+    }
+
     fn optimize_c(&mut self) {
 
+        let tup1 = self.get_gradient_magnitude(&self.edge_boundary);
+        let edge_thinned = tup1.1;
 
 
-        let (mut min_c, mut max_c, n_points) = (0.0, 0.5, 60);
+        let mut min_c = match self.current_c - 0.05 {
+            a if a <= 0.1 => {
+                0.1
+            }
+            a => {a}
+        };
+        let mut max_c = match self.current_c + 0.05 {
+            a if a > 1.0 => {
+                1.0
+            }
+            a => { a }
+        };
+        let n_points =  30;
         let (mut energy1, mut energy2, mut c1, mut c2) = (0.0, 0.0, 0.0, 0.0);
         let (mut latent1, mut latent2) = (Mat::default(), Mat::default());
 
@@ -350,70 +425,65 @@ impl EventAdder {
         // results!
 
         // create fibonacci sequence
-        // let mut fib = vec![1.0; 22];
-        // for i in 2..fib.len() {
-        //     fib[i] = fib[i-1] + fib[i-2];
-        // }
-        //
-        // let mut fib_index = 2;
-        // while fib[fib_index-1] < n_points as f64 {
-        //     fib_index += 1;
-        // }
-        //
-        //
-        // for k in 0..fib_index-1 {
-        //     if k == 0 {
-        //         c1 = min_c + fib[fib_index - k - 1]  / fib[fib_index-k+1] * (max_c - min_c);
-        //         c2 = max_c - fib[fib_index - k - 1]  / fib[fib_index-k+1] * (max_c - min_c);
-        //         match self.get_energy(c1) {
-        //             (a, b) => { energy1 = a; latent1 = b; }
-        //         };
-        //         opencv::core::normalize(&latent1, &mut cec_norm, 0.0, 1.0, NORM_MINMAX, -1, &opencv::core::no_array());
-        //         // show_display_force("latent1", &cec_norm, 1);
-        //         match self.get_energy(c2) {
-        //             (a, b) => { energy2 = a; latent2 = b; }
-        //         }
-        //         opencv::core::normalize(&latent2, &mut cec_norm, 0.0, 1.0, NORM_MINMAX, -1, &opencv::core::no_array());
-        //         // show_display_force("latent2", &cec_norm, 0);
-        //     }
-        //     if energy1 < energy2 {
-        //         max_c = c2;
-        //         c2 = c1;
-        //         energy2 = energy1;
-        //         latent2 = latent1;
-        //         c1 = min_c + fib[fib_index - k - 2] / fib[fib_index - k + 1] * (max_c - min_c);
-        //         match self.get_energy(c1) {
-        //             (a, b) => { energy1 = a; latent1 = b; }
-        //         };
-        //         opencv::core::normalize(&latent1, &mut cec_norm, 0.0, 1.0, NORM_MINMAX, -1, &opencv::core::no_array());
-        //         // show_display_force("latent1", &cec_norm, 0);
-        //     } else {
-        //         min_c = c1;
-        //         c1 = c2;
-        //         energy1 = energy2;
-        //         latent1 = latent2;
-        //         c2 = max_c - fib[fib_index - k - 1]  / fib[fib_index-k+1] * (max_c - min_c);
-        //         match self.get_energy(c2) {
-        //             (a, b) => { energy2 = a; latent2 = b; }
-        //         };
-        //         opencv::core::normalize(&latent2, &mut cec_norm, 0.0, 1.0, NORM_MINMAX, -1, &opencv::core::no_array());
-        //         // show_display_force("latent2", &cec_norm, 0);
-        //     }
-        // }
-        // if energy1 < energy2 {
-        //     self.current_c = c1;
-        //     self.latent_image = latent1;
-        // } else {
-        //     self.current_c = c2;
-        //     self.latent_image = latent2;
-        // }
-        // println!("Optimal c is: {}", self.current_c);
+        let mut fib = vec![1.0; 22];
+        for i in 2..fib.len() {
+            fib[i] = fib[i-1] + fib[i-2];
+        }
 
-        match self.get_energy(0.3) {
-            (a, b) => { energy2 = a; latent2 = b; }
-        };
-        self.current_c = 0.3;
-        self.latent_image = latent2;
+        let mut fib_index = 2;
+        while fib[fib_index-1] < n_points as f64 {
+            fib_index += 1;
+        }
+
+
+        for k in 0..fib_index-1 {
+            if k == 0 {
+                c1 = min_c + fib[fib_index - k - 1]  / fib[fib_index-k+1] * (max_c - min_c);
+                c2 = max_c - fib[fib_index - k - 1]  / fib[fib_index-k+1] * (max_c - min_c);
+                match self.get_energy(c1, &edge_thinned) {
+                    (a, b) => { energy1 = a; latent1 = b; }
+                };
+                opencv::core::normalize(&latent1, &mut cec_norm, 0.0, 1.0, NORM_MINMAX, -1, &opencv::core::no_array());
+                // show_display_force("latent1", &cec_norm, 1);
+                match self.get_energy(c2, &edge_thinned) {
+                    (a, b) => { energy2 = a; latent2 = b; }
+                }
+                opencv::core::normalize(&latent2, &mut cec_norm, 0.0, 1.0, NORM_MINMAX, -1, &opencv::core::no_array());
+                // show_display_force("latent2", &cec_norm, 0);
+            }
+            if energy1 < energy2 {
+                max_c = c2;
+                c2 = c1;
+                energy2 = energy1;
+                latent2 = latent1;
+                c1 = min_c + fib[fib_index - k - 2] / fib[fib_index - k + 1] * (max_c - min_c);
+                match self.get_energy(c1, &edge_thinned) {
+                    (a, b) => { energy1 = a; latent1 = b; }
+                };
+                opencv::core::normalize(&latent1, &mut cec_norm, 0.0, 1.0, NORM_MINMAX, -1, &opencv::core::no_array());
+                // show_display_force("latent1", &cec_norm, 0);
+            } else {
+                min_c = c1;
+                c1 = c2;
+                energy1 = energy2;
+                latent1 = latent2;
+                c2 = max_c - fib[fib_index - k - 1]  / fib[fib_index-k+1] * (max_c - min_c);
+                match self.get_energy(c2, &edge_thinned) {
+                    (a, b) => { energy2 = a; latent2 = b; }
+                };
+                opencv::core::normalize(&latent2, &mut cec_norm, 0.0, 1.0, NORM_MINMAX, -1, &opencv::core::no_array());
+                // show_display_force("latent2", &cec_norm, 0);
+            }
+        }
+        if energy1 < energy2 {
+            self.current_c = c1;
+            self.latent_image = latent1;
+        } else {
+            self.current_c = c2;
+            self.latent_image = latent2;
+        }
+        println!("Optimal c is: {}", self.current_c);
+
         opencv::core::normalize(
             &self.latent_image,
             &mut cec_norm,
@@ -423,74 +493,181 @@ impl EventAdder {
             -1,
             &opencv::core::no_array(),
         ).unwrap();
-        show_display_force("LATENT", &cec_norm, 0);
+        // show_display_force("LATENT", &cec_norm, 0, false);
     }
 
-    fn get_energy(&mut self, c_threshold: f64) -> (f64, Mat) {
+    fn get_energy(&mut self, c_threshold: f64, edge_thinned: &Mat) -> (f64, Mat) {
         self.deblur_image(c_threshold);
-
-        let mut edge_thresh_f64 = Mat::default();
-        let mut latent_thresh_f64 = Mat::default();
-
-        let edge_boundary_grad = self.get_gradient_magnitude(&self.edge_boundary);
-        let cutoff = 4.0 * sum_elems(&edge_boundary_grad).unwrap()[0] / (self.width as f64 * self.height as f64);
-        let t1 = threshold(&edge_boundary_grad, &mut edge_thresh_f64, cutoff, 1.0, THRESH_BINARY).unwrap();
-        // show_display_force("edge grad", &edge_thresh_f64, 0);
-        let edge_thinned = self.thin(&mut edge_thresh_f64);
-
-        // scale mat to values [0,1]
 
         let mut latent_image_exp = Mat::default();
         exp(&self.latent_image, &mut latent_image_exp).unwrap();
-        let mat_f1 = (&latent_image_exp / 255.0).into_result().unwrap().to_mat().unwrap();
-        let latent_image_grad = self.get_gradient_magnitude(&mat_f1);
-        let cutoff = 4.0 * sum_elems(&latent_image_grad).unwrap()[0] / (self.width as f64 * self.height as f64);
-        threshold(&latent_image_grad, &mut latent_thresh_f64, cutoff, 1.0, THRESH_BINARY).unwrap();
-        // show_display_force("latent grad", &latent_image_grad, 0);
-        let latent_thinned = self.thin(&mut latent_thresh_f64.clone());
+        let mut mat_f1 = (&latent_image_exp / 255.0).into_result().unwrap().to_mat().unwrap();
+        let tup2 = self.get_gradient_magnitude(&mat_f1);
+        let latent_grad_mag = tup2.0;
+        let latent_thinned = tup2.1;
 
-        // let edge_bytes = edge_thresh_f64.data_bytes_mut().unwrap();
-        // let latent_bytes = latent_thresh_f64.data_bytes_mut().unwrap();
-        // let latent_grad_bytes = latent_image_grad.data_bytes_mut().unwrap();
         let mut sharpness = 0;
         let mut tv = 0.0;
         for i in 0..self.height as i32 {
             for j in 0..self.width as i32 {
-                // let t : &f64 = edge_thinned.at_2d(i, j).unwrap();
-                if *edge_thinned.at_2d::<f64>(i, j).unwrap() == 1.0 && *latent_thinned.at_2d::<f64>(i, j).unwrap() == 1.0 {
+                if (*edge_thinned.at_2d::<f64>(i, j).unwrap() == 1.0 && *latent_thinned.at_2d::<f64>(i, j).unwrap() == 1.0) {
+                    // sharpness += 1;
+                } else {
                     sharpness += 1;
                 }
-                // sharpness += edge_bytes[i] as i64 * latent_bytes[i] as i64;
-                tv += *latent_thresh_f64.at_2d::<f64>(i, j).unwrap();
+                if *latent_grad_mag.at_2d::<f64>(i, j).unwrap() > 255.0 {
+                    print!("{} ", *latent_grad_mag.at_2d::<f64>(i, j).unwrap());
+                }
+
+                tv += *latent_grad_mag.at_2d::<f64>(i, j).unwrap();
             }
         }
 
         // Assume for now that lambda = 0.2 (TODO)
-        let energy = 0.03 * tv - sharpness as f64;
-        // println!("c {}, tv {}, Sharpness {}, energy {}", c_threshold, 0.03*tv, sharpness, energy);
+        let energy = -0.004*tv - sharpness as f64;
+        // println!("c {}, tv {}, Sharpness {}, energy {}", c_threshold, tv, sharpness, energy);
         // assert!(energy >= 0.0);
         (energy, self.latent_image.clone())
     }
 
-    fn get_gradient_magnitude(&self, mat: &Mat) -> Mat {
+    fn get_gradient_magnitude(&self, mat: &Mat) -> (Mat, Mat) {
         let mut max = 0.0;
         min_max_idx(&mat, None, Some(&mut max), None, None, &no_array()).unwrap();
 
-        // show_display_force("mat", &mat, 0);
+        // show_display_force("mat", &mat, 0, false);
 
         let mut sobel_dx = Mat::default();
         let mut sobel_dy = Mat::default();
         let mut grad = Mat::default();
         // ksize = 1 means no gaussian smoothing is done
-        sobel(&mat, &mut sobel_dx, -1, 1, 0, 1, 1.0, 0.0, BORDER_DEFAULT).unwrap();
-        // show_display_force("dx", &sobel_dx, 0);
-        sobel(&mat, &mut sobel_dy, -1, 0, 1, 1, 1.0, 0.0, BORDER_DEFAULT).unwrap();
-        // show_display_force("dy", &sobel_dy, 0);
-        sobel_dx = sobel_dx.clone().elem_mul(sobel_dx.clone()).into_result().unwrap().to_mat().unwrap();
-        sobel_dy = sobel_dy.clone().elem_mul(sobel_dy.clone()).into_result().unwrap().to_mat().unwrap();
-        sobel_dx = (sobel_dx + sobel_dy).into_result().unwrap().to_mat().unwrap();
-        sqrt(&sobel_dx, &mut grad).unwrap();    // This is the gradient magnitude image
-        grad
+        sobel(&mat, &mut sobel_dx, -1, 1, 0, 3, 1.0, 0.0, BORDER_DEFAULT).unwrap();
+        sobel(&mat, &mut sobel_dy, -1, 0, 1, 3, 1.0, 0.0, BORDER_DEFAULT).unwrap();
+        let mut sobel_dx_sq = sobel_dx.clone().elem_mul(sobel_dx.clone()).into_result().unwrap().to_mat().unwrap();
+        let sobel_dy_sq = sobel_dy.clone().elem_mul(sobel_dy.clone()).into_result().unwrap().to_mat().unwrap();
+        let sum_sq = (&sobel_dx_sq + &sobel_dy_sq).into_result().unwrap().to_mat().unwrap();
+        sqrt(&sum_sq, &mut grad).unwrap();    // This is the gradient magnitude image
+        // show_display_force("grad mag", &grad, 0, true);
+        let grad_mag = grad.clone();
+
+
+        // Try replicating code from https://stackoverflow.com/questions/49725744/what-is-the-opencv-equivalent-of-this-matlab-code-for-sobel-edge-detection
+        let ang = self.get_ang(&sobel_dy, &sobel_dx);
+        // let fudgefactor = 0.5;
+
+        let threshold_val = 4.0 * mean(&grad, &no_array()).unwrap().0[0];
+
+        for i in 0..self.height as i32 {
+            for j in 0..self.width as i32 {
+                let px = grad.at_2d_mut::<f64>(i, j).unwrap();
+                if *px < threshold_val {
+                    *px = 0.0;
+                }
+            }
+        }
+
+        // show_display_force("before suppressed", &grad, 1, true);
+        // TODO: do non-maximal suppression
+        self.orientated_non_max_suppression(&mut grad, &ang);
+        // show_display_force("suppressed", &grad, 1, true);
+
+
+
+        let mut thresholded = Mat::default();
+        threshold(&grad, &mut thresholded, 0.0, 1.0, THRESH_BINARY).unwrap();
+        // show_display_force("threshh", &thresholded, 0, false);
+
+
+        (grad_mag, thresholded)
+    }
+
+    fn orientated_non_max_suppression(&self, mag: &mut Mat, ang: &Mat) {
+        let mut ang_quant = Mat::zeros(self.height as i32, self.width as i32, CV_8U).unwrap().to_mat().unwrap();
+        for i in 0..self.height as i32 {
+            for j in 0..self.width as i32 {
+                let px = ang_quant.at_2d_mut::<u8>(i, j).unwrap();
+                let px_ang = ang.at_2d::<f64>(i, j).unwrap();
+                *px = (*px_ang / (PI / 4.0)).round() as u8 % 4;
+            }
+        }
+
+        let mut kernel_east = get_structuring_element(MORPH_RECT, Size { width: 3, height: 3 }, Point { x: -1, y: -1 }).unwrap();
+        for j in 0..3 {
+            *kernel_east.at_2d_mut::<u8>(0,j).unwrap() = 0;
+            *kernel_east.at_2d_mut::<u8>(2,j).unwrap() = 0;
+            // print!("{} ", kernel_east.at_2d::<u8>(i,j).unwrap());
+        }
+        let mut mag_east = Mat::default();
+        dilate(mag, &mut mag_east, &kernel_east, Point { x: -1, y: -1}, 1, BORDER_DEFAULT, Default::default()).unwrap();
+        // show_display_force("mag east", &mag_east, 0, true);
+        self.non_max_suppression(mag, &mut mag_east);
+
+        let mut kernel_southeast = kernel_east.clone();
+        *kernel_southeast.at_2d_mut::<u8>(0,0).unwrap() = 1;
+        *kernel_southeast.at_2d_mut::<u8>(1,0).unwrap() = 0;
+        *kernel_southeast.at_2d_mut::<u8>(1,2).unwrap() = 0;
+        *kernel_southeast.at_2d_mut::<u8>(2,2).unwrap() = 1;
+        let mut mag_southeast = Mat::default();
+        dilate(mag, &mut mag_southeast, &kernel_southeast, Point { x: -1, y: -1}, 1, BORDER_DEFAULT, Default::default()).unwrap();
+        self.non_max_suppression(mag, &mut mag_southeast);
+
+        let mut kernel_south = kernel_east.clone();
+        *kernel_south.at_2d_mut::<u8>(1,0).unwrap() = 0;
+        *kernel_south.at_2d_mut::<u8>(0,1).unwrap() = 1;
+        *kernel_south.at_2d_mut::<u8>(2,1).unwrap() = 1;
+        *kernel_south.at_2d_mut::<u8>(1,2).unwrap() = 0;
+        let mut mag_south = Mat::default();
+        dilate(mag, &mut mag_south, &kernel_south, Point { x: -1, y: -1}, 1, BORDER_DEFAULT, Default::default()).unwrap();
+        self.non_max_suppression(mag, &mut mag_south);
+
+        let mut kernel_southwest = kernel_east.clone();
+        *kernel_southwest.at_2d_mut::<u8>(1,0).unwrap() = 0;
+        *kernel_southwest.at_2d_mut::<u8>(0,2).unwrap() = 1;
+        *kernel_southwest.at_2d_mut::<u8>(2,0).unwrap() = 1;
+        *kernel_southwest.at_2d_mut::<u8>(1,2).unwrap() = 0;
+        let mut mag_southwest = Mat::default();
+        dilate(mag, &mut mag_southwest, &kernel_southwest, Point { x: -1, y: -1}, 1, BORDER_DEFAULT, Default::default()).unwrap();
+        self.non_max_suppression(mag, &mut mag_southwest);
+
+        for i in 0..self.height as i32 {
+            for j in 0..self.width as i32 {
+                let px = mag.at_2d_mut::<f64>(i, j).unwrap();
+                *px = match *ang_quant.at_2d::<u8>(i, j).unwrap() {
+                    0 => { *mag_east.at_2d::<f64>(i,j).unwrap() }
+                    1 => { *mag_southeast.at_2d::<f64>(i,j).unwrap() }
+                    2 => { *mag_south.at_2d::<f64>(i,j).unwrap() }
+                    3 => { *mag_southwest.at_2d::<f64>(i,j).unwrap() }
+                    a => {
+                        panic!("unexpected ang quant value: {}", a)
+                    }
+                }
+            }
+        }
+    }
+
+    fn non_max_suppression(&self, data: &Mat, data_max: &mut Mat) {
+        for i in 0..self.height as i32 {
+            for j in 0..self.width as i32 {
+                let max_px = data_max.at_2d_mut::<f64>(i, j).unwrap();
+                if *data.at_2d::<f64>(i, j).unwrap() != *max_px {
+                    *max_px = 0.0;
+                }
+            }
+        }
+    }
+
+    fn get_ang(&self, a: &Mat, b: &Mat) -> Mat {
+        let mut ang = Mat::zeros(self.height as i32, self.width as i32, CV_64F).unwrap().to_mat().unwrap();
+
+        for i in 0..self.height as i32 {
+            for j in 0..self.width as i32{
+                let mut ang_px = ang.at_2d_mut::<f64>(i, j).unwrap();
+                let y = *a.at_2d::<f64>(i, j).unwrap();
+                let x = *b.at_2d::<f64>(i, j).unwrap();
+                *ang_px = y.atan2(x);
+
+            }
+        }
+        ang
     }
 
     /// The original Matlab implementation used thinning. I adapted this function
@@ -519,6 +696,10 @@ impl EventAdder {
     fn add_to_edge_boundary(&mut self, event: &Event) {
         let px: &mut f64 = self.edge_boundary.at_2d_mut(event.y() as i32, event.x() as i32).unwrap();
         let mid_t = (self.blur_info.mid_idx * self.interval_t as usize) as i64;
+        let t0 = event.t() - self.t_shift;
+        let t = (mid_t - (event.t() - self.t_shift)) as f64;
+        let t2 = t / self.interval_t as f64;
+
         let inner = match (mid_t - (event.t() - self.t_shift)) as f64 / self.interval_t as f64 {
             a if a > 0.0 => { -a }
             a => { a }
@@ -527,7 +708,10 @@ impl EventAdder {
         *px += match event.on() {
             true => { outer }
             false => { -outer }
-        }
+        };
+        // if self.event_count % 100 == 0 {
+        //     show_display_force("temp edge", &self.edge_boundary, 1, true);
+        // }
     }
 }
 

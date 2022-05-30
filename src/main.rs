@@ -22,6 +22,15 @@ pub struct Args {
     #[clap(short, long, default_value = "")]
     pub(crate) events_filename: String,
 
+    /// Starting value for c (contrast threshold)
+    #[clap(long, default_value_t = 0.3)]
+    pub(crate) start_c: f64,
+
+    /// Optimize c? (0=no, 1=yes)
+    /// If no, then the system will only use the start_c value
+    #[clap(long, default_value_t = 1)]
+    pub(crate) optimize_c: i32,
+
     /// Show live view display? (0=no, 1=yes)
     #[clap(short, long, default_value_t = 1)]
     pub(crate) show_display: i32,
@@ -41,6 +50,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut reconstructor = Reconstructor::new(
         args.base_path,
         args.events_filename,
+        args.start_c,
+        args.optimize_c != 0,
         args.show_display != 0,
         args.output_fps,
     );
@@ -57,7 +68,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                 // Iterate through images by pressing a key on keyboard. To iterate automatically,
                 // change `wait` to 1
-                show_display("RETURNED", &mat_8u, 0, &reconstructor);
+                show_display("RETURNED", &mat_8u, 1, &reconstructor);
             }
         }
     }
