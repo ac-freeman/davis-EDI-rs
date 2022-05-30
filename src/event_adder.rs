@@ -316,7 +316,7 @@ impl EventAdder {
         let interval = &mut self.event_intervals[self.blur_info.begin_bookend.output_interval_idx as usize - self.intervals_popped as usize];
         interval.c_accumuluator =
             (&interval.e_accumuluator * &c_threshold).into_result().unwrap().to_mat().unwrap();
-        show_display_force("c_accum", &interval.c_accumuluator, 0, true);
+        // show_display_force("c_accum", &interval.c_accumuluator, 0, true);
         c_sum = (c_sum - &interval.c_accumuluator).into_result().unwrap().to_mat().unwrap();
         exp(&c_sum, &mut temp_exp).unwrap();
         let proportion1 = (self.interval_t - self.blur_info.begin_bookend.interval_timestamp) as f64 / self.interval_t as f64;
