@@ -133,6 +133,34 @@ impl Reconstructor {
             }
         };
     }
+
+    fn get_more_images(&mut self) {
+        loop {
+            // match self.aedat_decoder.next().unwrap() {
+            match self.packet_queue.pop_front() {
+                Some(p) => {
+                    match p.stream_id {
+                        a if a == aedat::base::StreamContent::Frame as u32 => { }
+                        a if a == aedat::base::StreamContent::Events as u32 => {
+                            match self.event_adder.add_events(p, &mut self.current_blurred_image) {
+                                None => {
+                                    // println!("debug 1")
+                                }
+                                Some(images) => {
+                                    self.latent_image_queue = images;
+                                    return
+                                }
+                            }
+                        }
+                        _ => {println!("debug 2")}
+                    }
+                }
+                _ => {
+                    self.fill_packet_queue_to_frame();
+                }
+            }
+        }
+    }
 }
 
 
@@ -181,45 +209,17 @@ impl Iterator for Reconstructor {
 
             // Else we need to rebuild the queue
             _ => {
-                loop {
-                    // match self.aedat_decoder.next().unwrap() {
-                    match self.packet_queue.pop_front() {
-                        Some(p) => {
-                            match p.stream_id {
-                                a if a == aedat::base::StreamContent::Frame as u32 => { }
-                                a if a == aedat::base::StreamContent::Events as u32 => {
-                                    match self.event_adder.add_events(p, &mut self.current_blurred_image) {
-                                        None => {
-                                            // println!("debug 1")
-                                        }
-                                        Some(images) => {
-                                            self.latent_image_queue = images;
-                                            match self.latent_image_queue.pop_front() {
-                                                None => { panic!("No images in the returned queue")}
-                                                Some(image) => {
-                                                    self.fill_packet_queue_to_frame();
-                                                    // let start_t = self.current_blurred_image.exposure_begin_t - self.t_shift;
-                                                    // let interval_t = (self.current_blurred_image.exposure_end_t - self.current_blurred_image.exposure_begin_t) / self.frame_exp_divisor;
-                                                    // let end_t = interval_t + start_t;
-                                                    // self.event_adder.reset(start_t, interval_t, end_t);
-                                                    return Some(Ok(image))}
-                                            }
-                                        }
-                                    }
-                                }
-                                _ => {println!("debug 2")}
-                            }
-                        }
-                        _ => {
-                            self.fill_packet_queue_to_frame();
-                            // let start_t = self.current_blurred_image.exposure_begin_t - self.t_shift;
-                            // // let interval_t = (self.current_blurred_image.exposure_end_t - self.current_blurred_image.exposure_begin_t) / self.frame_exp_divisor;
-                            // let interval_t = self.output_frame_length;
-                            // let end_t = interval_t + start_t;
-                            // self.event_adder.reset(start_t, interval_t, end_t);
-                            println!("debug 3")
-                        }
-                    }
+                self.get_more_images();
+                match self.latent_image_queue.pop_front() {
+                    None => { panic!("No images in the returned queue")}
+                    Some(image) => {
+
+                        // TODO: Split this off so that it can execute in its own thread.
+                        // After reaching this point, immediately call it again in thread (maybe
+                        // a few times?), so that it runs in the background. This will help hide
+                        // the latency
+                        self.fill_packet_queue_to_frame();
+                        return Some(Ok(image))}
                 }
 
             }
