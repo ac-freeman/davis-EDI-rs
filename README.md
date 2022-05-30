@@ -15,7 +15,7 @@ There are some major things left before I can start implementing mEDI. Any assis
 - [ ] Improve performance
 - [ ] Make it more Rusty (follow conventions)
 - [ ] **Fix the contrast threshold optimization**
-  - I could really use help with this. My energy function isn't producing great or consistent results. I did my best to replicate the MATLAB functions for getting gradient magnitude and the edge cross correlation, but it's not quite looking like it does in the original paper. For now, the program just uses a hard-coded contrast threshold value.
+  - I could really use help with this. My energy function isn't producing great or consistent results. I did my best to replicate the MATLAB functions for getting gradient magnitude and the edge cross correlation, but it's not quite looking like it does in the original paper. ~~For now, the program just uses a hard-coded contrast threshold value.~~ There's a command-line option to enable the contrast threshold optimization, but it works best when input APS images are blurry.
 
 ## Requirements
 - Rust 2021 or higher
