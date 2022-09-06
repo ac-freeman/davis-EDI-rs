@@ -7,6 +7,7 @@ use serde::Deserialize;
 
 mod reconstructor;
 mod event_adder;
+mod event_adder_new;
 
 #[derive(Parser, Debug, Deserialize, Default)]
 pub struct Args {

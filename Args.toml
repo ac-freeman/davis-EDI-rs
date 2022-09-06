@@ -1,7 +1,7 @@
 args_filename = ""
-base_path = "./dataset/"
-events_filename = "dvSave-2022_05_17_14_48_18.aedat4"
-start_c = 0.28
-optimize_c = 1
+base_path = "/media/andrew/ExternalM2/DynamicVision/"
+events_filename = "dvSave-2022_05_31_12_53_47.aedat4"
+start_c = 0.15
+optimize_c = 0
 show_display = 1
 output_fps = 1000

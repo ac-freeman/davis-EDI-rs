@@ -4,7 +4,7 @@ use aedat::base::{Packet, ParseError, Stream};
 use opencv::core::{CV_64F, CV_8S, CV_8U, Mat, MatExprTraitConst, MatTrait, MatTraitConst, MatTraitManual, NORM_MINMAX, Size};
 use opencv::highgui;
 use opencv::imgproc::resize;
-use crate::event_adder::{BlurInfo, EventAdder};
+use crate::event_adder_new::{BlurInfo, EventAdderNew};
 
 // TODO: find this through optimization
 // pub const C_THRES: f64 = 0.2;
@@ -25,7 +25,7 @@ pub struct Reconstructor {
     packet_queue: VecDeque<Packet>,
     t_shift: i64,
     output_frame_length: i64,
-    event_adder: EventAdder,
+    event_adder: EventAdderNew,
     latent_image_queue: VecDeque<Mat>,
 }
 
@@ -77,13 +77,14 @@ impl Reconstructor {
             packet_queue,
             t_shift,
             output_frame_length,
-            event_adder: EventAdder::new(height as usize, width as usize, t_shift, output_frame_length, start_c, optimize_c),
+            event_adder: EventAdderNew::new(height as usize, width as usize, t_shift, output_frame_length, start_c, optimize_c),
             latent_image_queue: VecDeque::new(),
         };
 
         r
     }
 
+    /// Read packets until the next APS frame is reached (inclusive)
     fn fill_packet_queue_to_frame (&mut self) {
         loop {
             match self.aedat_decoder.next().unwrap() {
@@ -101,7 +102,7 @@ impl Reconstructor {
                             *px = frame.pixels().unwrap()[idx];
                         }
                         let mut mat_64f = Mat::default();
-                        mat_8u.convert_to(&mut mat_64f, CV_64F, 1.0, 0.0).unwrap();
+                        mat_8u.convert_to(&mut mat_64f, CV_64F, 1.0/255.0, 0.0).unwrap();
 
                         let blur_info = BlurInfo::new(
                         mat_64f,
@@ -122,7 +123,7 @@ impl Reconstructor {
                             }
                         }
 
-                        show_display_force("blurred input", &(self.event_adder.blur_info.blurred_image.clone() /255.0).into_result().unwrap().to_mat().unwrap(), 1, false);
+                        show_display_force("blurred input", &self.event_adder.blur_info.blurred_image, 1, false);
                         return
                     }
                     else if p.stream_id == aedat::base::StreamContent::Events as u32 {
@@ -134,6 +135,7 @@ impl Reconstructor {
         };
     }
 
+    /// Generates reconstructed images from the next packet of events
     fn get_more_images(&mut self) {
         loop {
             // match self.aedat_decoder.next().unwrap() {
@@ -142,20 +144,13 @@ impl Reconstructor {
                     match p.stream_id {
                         a if a == aedat::base::StreamContent::Frame as u32 => { }
                         a if a == aedat::base::StreamContent::Events as u32 => {
-                            match self.event_adder.add_events(p, &mut self.current_blurred_image) {
-                                None => {
-                                    // println!("debug 1")
-                                }
-                                Some(images) => {
-                                    self.latent_image_queue = images;
-                                    return
-                                }
-                            }
+                            self.event_adder.sort_events(p);
                         }
                         _ => {println!("debug 2")}
                     }
                 }
                 _ => {
+                    let rett = self.event_adder.deblur_image();
                     self.fill_packet_queue_to_frame();
                 }
             }
@@ -200,6 +195,7 @@ pub struct LatentImage {
 impl Iterator for Reconstructor {
     type Item = Result<Mat, ReconstructionError>;
 
+    /// Get the next reconstructed image
     fn next(&mut self) -> Option<Self::Item> {
         return match self.latent_image_queue.pop_front() {
             // If we have a queue of images already, just return the next one
