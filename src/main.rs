@@ -1,16 +1,14 @@
 extern crate core;
 
+use crate::reconstructor::{show_display, Reconstructor};
+use clap::Parser;
 use std::error::Error;
 use std::time::Instant;
-use crate::reconstructor::{ReconstructionError, Reconstructor, show_display};
-use clap::Parser;
-use opencv::core::{CV_8U, Mat, MatTraitConst};
-use serde;
+
 use serde::Deserialize;
 
-mod reconstructor;
 mod event_adder;
-mod event_adder_new;
+mod reconstructor;
 
 #[derive(Parser, Debug, Deserialize, Default)]
 pub struct Args {
@@ -68,8 +66,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
             Some(image) => {
                 let image = match image {
-                    Ok(a) => {a}
-                    Err(_) => {panic!("No image")}
+                    Ok(a) => a,
+                    Err(_) => {
+                        panic!("No image")
+                    }
                 };
                 // let mut mat_8u = Mat::default();
                 // image.convert_to(&mut mat_8u, CV_8U, 255.0, 0.0).unwrap();
