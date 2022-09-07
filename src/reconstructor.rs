@@ -1,4 +1,6 @@
 use std::collections::VecDeque;
+use std::io;
+use std::io::Write;
 use std::path::Path;
 use std::time::Instant;
 use aedat::base::{Packet, ParseError, Stream};
@@ -218,11 +220,12 @@ impl Iterator for Reconstructor {
             _ => {
                 let mut now = Instant::now();
                 self.get_more_images();
-                println!(
+                print!(
                     "\r{} frames in  {}ms",
                     self.latent_image_queue.len(),
                     now.elapsed().as_millis()
                 );
+                io::stdout().flush().unwrap();
                 match self.latent_image_queue.pop_front() {
                     None => { panic!("No images in the returned queue")}
                     Some(image) => {

@@ -60,18 +60,21 @@ fn main() -> Result<(), Box<dyn Error>> {
     );
     loop {
         match reconstructor.next() {
-            None => {}
+            None => {
+                println!("\nFinished!");
+                break;
+            }
             Some(image) => {
                 let image = match image {
                     Ok(a) => {a}
                     Err(_) => {panic!("No image")}
                 };
-                let mut mat_8u = Mat::default();
-                image.convert_to(&mut mat_8u, CV_8U, 255.0, 0.0).unwrap();
+                // let mut mat_8u = Mat::default();
+                // image.convert_to(&mut mat_8u, CV_8U, 255.0, 0.0).unwrap();
 
                 // Iterate through images by pressing a key on keyboard. To iterate automatically,
                 // change `wait` to 1
-                show_display("RETURNED", &mat_8u, 1, &reconstructor);
+                show_display("RETURNED", &image, 1, &reconstructor);
             }
         }
     }
