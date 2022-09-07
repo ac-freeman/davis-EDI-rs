@@ -7,7 +7,7 @@ use opencv::core::{
 use opencv::highgui;
 use opencv::imgproc::resize;
 use std::collections::VecDeque;
-use std::io;
+use std::{io, mem};
 use std::io::Write;
 use std::path::Path;
 use std::time::Instant;
@@ -122,15 +122,15 @@ impl Reconstructor {
                             frame.exposure_begin_t(),
                             frame.exposure_end_t(),
                         );
-                        // match self.event_adder.blur_info.init {
-                        //     false => {
-                        //         self.event_adder.blur_info = blur_info;
-                        //     }
-                        //     true => {
-                        //         self.event_adder.next_blur_info = blur_info;
-                        //     }
-                        // }
-                        self.event_adder.blur_info = blur_info;
+                        match self.event_adder.blur_info.init {
+                            false => {
+                                self.event_adder.blur_info = blur_info;
+                            }
+                            true => {
+                                self.event_adder.next_blur_info = blur_info;
+                            }
+                        }
+                        // self.event_adder.blur_info = blur_info;
 
                         // show_display_force("blurred input", &self.event_adder.blur_info.blurred_image, 1, false);
                         return Ok(());
@@ -217,6 +217,10 @@ impl Iterator for Reconstructor {
             // Else we need to rebuild the queue
             _ => {
                 let now = Instant::now();
+                if self.event_adder.next_blur_info.init {
+                    mem::swap(&mut self.event_adder.blur_info, &mut self.event_adder.next_blur_info);
+                    self.event_adder.next_blur_info.init = false;
+                }
                 self.get_more_images();
                 print!(
                     "\r{} frames in  {}ms",
