@@ -116,8 +116,6 @@ impl EventAdderNew {
         ////////////////////////
         // First, do the queue'd up events preceding this image. These intermediate images
         // are based on the most recent deblurred latent image
-        // ret_vec.push(self.get_intermediate_images(c));   // TODO:
-        let mut now = Instant::now();
         if self.last_interval_start_timestamp > 0 {
             let mut intermediate_interval_start_timestamps = vec![(self.last_interval_start_timestamp + self.interval_t, Mat::default())];
             let mut current_ts = intermediate_interval_start_timestamps[0].0 + self.interval_t;
@@ -170,12 +168,6 @@ impl EventAdderNew {
         for elem in interval_start_timestamps {
             ret_vec.push(elem.1)
         }
-
-        println!(
-            "\r{} frames in  {}ms",
-            ret_vec.len(),
-            now.elapsed().as_millis()
-        );
 
         self.latent_image = ret_vec.last().unwrap().clone();
 

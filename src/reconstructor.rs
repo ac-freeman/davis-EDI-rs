@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 use std::path::Path;
+use std::time::Instant;
 use aedat::base::{Packet, ParseError, Stream};
 use opencv::core::{CV_64F, CV_8S, CV_8U, Mat, MatExprTraitConst, MatTrait, MatTraitConst, MatTraitManual, NORM_MINMAX, Size};
 use opencv::highgui;
@@ -68,7 +69,7 @@ impl Reconstructor {
 
 
 
-        let r = Reconstructor {
+        let mut r = Reconstructor {
             show_display: display,
             current_blurred_image: Default::default(),
             aedat_decoder,
@@ -80,6 +81,7 @@ impl Reconstructor {
             event_adder: EventAdderNew::new(height as usize, width as usize, t_shift, output_frame_length, start_c, optimize_c),
             latent_image_queue: VecDeque::new(),
         };
+        r.fill_packet_queue_to_frame();
 
         r
     }
@@ -124,7 +126,7 @@ impl Reconstructor {
                         // }
                         self.event_adder.blur_info = blur_info;
 
-                        // show_display_force("blurred input", &self.event_adder.blur_info.blurred_image, 1, false);
+                        show_display_force("blurred input", &self.event_adder.blur_info.blurred_image, 1, false);
                         return
                     }
                     else if p.stream_id == aedat::base::StreamContent::Events as u32 {
@@ -153,7 +155,7 @@ impl Reconstructor {
                 _ => {
                     match self.event_adder.deblur_image() {
                         None => {
-                            self.fill_packet_queue_to_frame();
+                            panic!("No images returned from deblur call")
                         }
                         Some(frames) => {
                             self.latent_image_queue.append(&mut VecDeque::from(frames));
@@ -214,7 +216,13 @@ impl Iterator for Reconstructor {
 
             // Else we need to rebuild the queue
             _ => {
+                let mut now = Instant::now();
                 self.get_more_images();
+                println!(
+                    "\r{} frames in  {}ms",
+                    self.latent_image_queue.len(),
+                    now.elapsed().as_millis()
+                );
                 match self.latent_image_queue.pop_front() {
                     None => { panic!("No images in the returned queue")}
                     Some(image) => {
