@@ -1,6 +1,7 @@
 extern crate core;
 
 use std::error::Error;
+use std::time::Instant;
 use crate::reconstructor::{ReconstructionError, Reconstructor, show_display};
 use clap::Parser;
 use opencv::core::{CV_8U, Mat, MatTraitConst};
@@ -58,6 +59,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         args.show_display != 0,
         args.output_fps,
     );
+    let mut last_time = Instant::now();
     loop {
         match reconstructor.next() {
             None => {
@@ -72,9 +74,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // let mut mat_8u = Mat::default();
                 // image.convert_to(&mut mat_8u, CV_8U, 255.0, 0.0).unwrap();
 
-                // Iterate through images by pressing a key on keyboard. To iterate automatically,
-                // change `wait` to 1
-                show_display("RETURNED", &image, 1, &reconstructor);
+                // Don't refresh the window more than 60 Hz
+                if (Instant::now() - last_time).as_millis() > 16 {
+                    last_time = Instant::now();
+                    // Iterate through images by pressing a key on keyboard. To iterate automatically,
+                    // change `wait` to 1
+                    show_display("RETURNED", &image, 1, &reconstructor);
+                }
             }
         }
     }
