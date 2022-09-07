@@ -114,14 +114,15 @@ impl Reconstructor {
                         self.width as i32,
                         self.event_adder.intervals_popped,
                         );
-                        match self.event_adder.blur_info.init {
-                            false => {
-                                self.event_adder.blur_info = blur_info;
-                            }
-                            true => {
-                                self.event_adder.next_blur_info = blur_info;
-                            }
-                        }
+                        // match self.event_adder.blur_info.init {
+                        //     false => {
+                        //         self.event_adder.blur_info = blur_info;
+                        //     }
+                        //     true => {
+                        //         self.event_adder.next_blur_info = blur_info;
+                        //     }
+                        // }
+                        self.event_adder.blur_info = blur_info;
 
                         show_display_force("blurred input", &self.event_adder.blur_info.blurred_image, 1, false);
                         return
@@ -150,7 +151,14 @@ impl Reconstructor {
                     }
                 }
                 _ => {
-                    let rett = self.event_adder.deblur_image();
+                    match self.event_adder.deblur_image() {
+                        None => {}
+                        Some(frames) => {
+                            self.latent_image_queue.append(&mut VecDeque::from(frames));
+                            self.event_adder.reset_event_queues();
+                        }
+                    }
+
                     self.fill_packet_queue_to_frame();
                 }
             }

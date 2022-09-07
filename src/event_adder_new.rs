@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 use std::f64::consts::PI;
+use std::mem;
 use std::ops::{Mul, Sub};
 use std::time::Instant;
 use aedat::base::Packet;
@@ -90,14 +91,30 @@ impl EventAdderNew {
         }
     }
 
-    pub fn deblur_image(&mut self) {
+    pub fn reset_event_queues(&mut self) {
+        mem::swap(&mut self.event_before_queue, &mut self.event_after_queue);
+        self.event_after_queue.clear();
+        self.event_during_queue.clear();
+    }
+
+    pub fn deblur_image(&mut self) -> Option<Vec<Mat>>{
         if !self.blur_info.init {
-            return;
+            return None
         }
 
-        // The beginning time for interval 0. Probably before the blurred image exposure beging time
+        // The beginning time for interval 0. Probably before the blurred image exposure beginning time
         let interval_beginning_start = ((self.blur_info.exposure_begin_t) / self.interval_t) * self.interval_t;
         let interval_end_start = ((self.blur_info.exposure_end_t) / self.interval_t) * self.interval_t;
+
+
+        ////////////////////////
+        // First, do the queue'd up events preceding this image. These intermediate images
+        // are based on the most recent deblurred latent image
+        // ret_vec.push(self.get_intermediate_images(c));   // TODO:
+
+
+        ////////////////////////
+
 
         // Make a vec of these timestamps so we can (eventually) iterate them concurrently
         let mut interval_start_timestamps = vec![interval_beginning_start];
@@ -112,21 +129,32 @@ impl EventAdderNew {
         }
 
 
+
+        let mut ret_vec = Vec::with_capacity(interval_start_timestamps.len());
         for timestamp_start in interval_start_timestamps {
             // let c = optimize_c()
             let c = 0.15;
             let mut now = Instant::now();
-            let latent_image = self.get_latent_and_edge(c, timestamp_start);
+            ret_vec.push(self.get_latent_and_edge(c, timestamp_start));
             println!(
                 "\rFrame in  {}ms",
                 now.elapsed().as_millis()
             );
         }
 
+        self.latent_image = ret_vec.last().unwrap().clone();
 
+        Some(ret_vec)
     }
 
-    fn get_latent_and_edge(&self, c: f64, timestamp_start: i64) {
+    fn get_intermediate_images(&self, c: f64) -> Vec<Mat> {
+        todo!()
+    }
+
+    fn get_latent_and_edge(&self, c: f64, timestamp_start: i64) -> Mat {
+        if self.event_during_queue.is_empty() {
+            panic!("No during queue")
+        }
         // TODO: Need to avoid having to traverse the whole queue each time?
         let mut start_index = 0;
         loop {
@@ -198,7 +226,9 @@ impl EventAdderNew {
             self.event_during_queue.last().unwrap().t() as f64 - self.event_during_queue[0].t() as f64
         ).unwrap()
         ).unwrap().to_mat().unwrap();
-        // show_display_force("latent", &latent_image, 1, true)
+
+        show_display_force("latent", &latent_image, 1, true);
+        latent_image
     }
 }
 
