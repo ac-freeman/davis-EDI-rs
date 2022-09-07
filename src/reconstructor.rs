@@ -124,7 +124,7 @@ impl Reconstructor {
                         // }
                         self.event_adder.blur_info = blur_info;
 
-                        show_display_force("blurred input", &self.event_adder.blur_info.blurred_image, 1, false);
+                        // show_display_force("blurred input", &self.event_adder.blur_info.blurred_image, 1, false);
                         return
                     }
                     else if p.stream_id == aedat::base::StreamContent::Events as u32 {
@@ -152,14 +152,15 @@ impl Reconstructor {
                 }
                 _ => {
                     match self.event_adder.deblur_image() {
-                        None => {}
+                        None => {
+                            self.fill_packet_queue_to_frame();
+                        }
                         Some(frames) => {
                             self.latent_image_queue.append(&mut VecDeque::from(frames));
                             self.event_adder.reset_event_queues();
+                            break;
                         }
                     }
-
-                    self.fill_packet_queue_to_frame();
                 }
             }
         }

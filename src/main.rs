@@ -67,7 +67,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     Err(_) => {panic!("No image")}
                 };
                 let mut mat_8u = Mat::default();
-                image.convert_to(&mut mat_8u, CV_8U, 1.0, 0.0).unwrap();
+                image.convert_to(&mut mat_8u, CV_8U, 255.0, 0.0).unwrap();
 
                 // Iterate through images by pressing a key on keyboard. To iterate automatically,
                 // change `wait` to 1
