@@ -58,6 +58,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         args.output_fps,
     );
     let mut last_time = Instant::now();
+    let first_time = last_time;
+    let mut frame_count = 0;
     loop {
         match reconstructor.next() {
             None => {
@@ -65,6 +67,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 break;
             }
             Some(image) => {
+                frame_count += 1;
                 let image = match image {
                     Ok(a) => a,
                     Err(_) => {
@@ -84,5 +87,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     }
+    println!("Reconstructed {} frames in {} seconds, at an average {} FPS",
+             frame_count,
+             (Instant::now() - first_time).as_secs(),
+             frame_count as f32 / (Instant::now() - first_time).as_secs_f32());
     Ok(())
 }

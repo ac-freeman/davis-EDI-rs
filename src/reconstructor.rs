@@ -13,9 +13,6 @@ use std::path::Path;
 use std::time::Instant;
 use simple_error::SimpleError;
 
-// TODO: find this through optimization
-// pub const C_THRES: f64 = 0.2;
-
 #[derive(Default)]
 pub struct BlurredInput {
     pub image: Mat,
@@ -25,13 +22,10 @@ pub struct BlurredInput {
 
 pub struct Reconstructor {
     show_display: bool,
-    current_blurred_image: BlurredInput,
     aedat_decoder: aedat::base::Decoder,
     height: usize,
     width: usize,
     packet_queue: VecDeque<Packet>,
-    t_shift: i64,
-    output_frame_length: i64,
     event_adder: EventAdder,
     latent_image_queue: VecDeque<Mat>,
 }
@@ -59,22 +53,19 @@ impl Reconstructor {
         }
 
         let packet_queue = VecDeque::new();
-        let t_shift;
         let output_frame_length = (1000000.0 / output_fps) as i64;
 
         // Get the first frame and ignore events before it
         loop {
             if let Ok(p) = aedat_decoder.next().unwrap() {
                 if p.stream_id == aedat::base::StreamContent::Frame as u32 {
-                    let frame = match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer)
+                    match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer)
                     {
                         Ok(result) => result,
                         Err(_) => {
                             panic!("the packet does not have a size prefix");
                         }
                     };
-                    t_shift = frame.exposure_end_t();
-                    // output_frame_length = (frame.exposure_end_t() - frame.exposure_begin_t()) / frame_exp_divisor;
                     break;
                 }
             }
@@ -82,24 +73,20 @@ impl Reconstructor {
 
         let mut r = Reconstructor {
             show_display: display,
-            current_blurred_image: Default::default(),
             aedat_decoder,
             height: height as usize,
             width: width as usize,
             packet_queue,
-            t_shift,
-            output_frame_length,
             event_adder: EventAdder::new(
                 height as usize,
                 width as usize,
-                t_shift,
                 output_frame_length,
                 start_c,
                 optimize_c,
             ),
             latent_image_queue: VecDeque::new(),
         };
-        r.fill_packet_queue_to_frame();
+        r.fill_packet_queue_to_frame().unwrap();
 
         r
     }
@@ -134,11 +121,6 @@ impl Reconstructor {
                             mat_64f,
                             frame.exposure_begin_t(),
                             frame.exposure_end_t(),
-                            self.t_shift,
-                            self.output_frame_length,
-                            self.height as i32,
-                            self.width as i32,
-                            self.event_adder.intervals_popped,
                         );
                         // match self.event_adder.blur_info.init {
                         //     false => {
@@ -197,7 +179,7 @@ pub struct ReconstructionError {
 }
 
 impl ReconstructionError {
-    pub fn new(message: &str) -> ReconstructionError {
+    pub fn _new(message: &str) -> ReconstructionError {
         ReconstructionError {
             message: message.to_string(),
         }
@@ -295,7 +277,7 @@ pub fn show_display(window_name: &str, mat: &Mat, wait: i32, reconstructor: &Rec
 }
 
 /// TODO: Remove. Just for debugging.
-pub fn show_display_force(window_name: &str, mat: &Mat, wait: i32, normalize: bool) {
+pub fn _show_display_force(window_name: &str, mat: &Mat, wait: i32, normalize: bool) {
     let mut normed = mat.clone();
     let mut tmp = Mat::default();
     if normalize {
@@ -307,7 +289,7 @@ pub fn show_display_force(window_name: &str, mat: &Mat, wait: i32, normalize: bo
             NORM_MINMAX,
             -1,
             &opencv::core::no_array(),
-        );
+        ).unwrap();
     }
 
     if mat.rows() != 540 {

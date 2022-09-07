@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use std::mem;
 use std::ops::Mul;
 
@@ -13,8 +11,6 @@ use opencv::core::{
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 pub struct EventAdder {
-    t_shift: i64,
-
     /// The time span of each reconstructed frame
     interval_t: i64,
 
@@ -29,17 +25,11 @@ pub struct EventAdder {
     height: i32,
     width: i32,
     last_interval_start_timestamp: i64,
-    interval_count: i32,
-    pub intervals_popped: i32,
-    sum_mat: Mat,
     latent_image: Mat,
-    return_queue: VecDeque<Mat>,
     pub(crate) blur_info: BlurInfo,
     pub(crate) next_blur_info: BlurInfo,
-    edge_boundary: Mat,
     current_c: f64,
     optimize_c: bool,
-    event_count: i64, // TODO: for debuggin only
 }
 
 unsafe impl Send for EventAdder {}
@@ -49,13 +39,11 @@ impl EventAdder {
     pub fn new(
         height: usize,
         width: usize,
-        t_shift: i64,
         output_frame_length: i64,
         start_c: f64,
         optimize_c: bool,
     ) -> EventAdder {
         EventAdder {
-            t_shift,
             interval_t: output_frame_length,
             event_before_queue: Vec::new(),
             event_during_queue: Vec::new(),
@@ -63,23 +51,14 @@ impl EventAdder {
             height: height as i32,
             width: width as i32,
             last_interval_start_timestamp: 0,
-            interval_count: 0,
-            intervals_popped: 0,
-            sum_mat: Default::default(),
             latent_image: Mat::zeros(height as i32, width as i32, CV_64F)
                 .unwrap()
                 .to_mat()
                 .unwrap(),
-            return_queue: VecDeque::new(),
             blur_info: Default::default(),
             next_blur_info: Default::default(),
-            edge_boundary: Mat::zeros(height as i32, width as i32, CV_64F)
-                .unwrap()
-                .to_mat()
-                .unwrap(),
             current_c: start_c,
             optimize_c,
-            event_count: 0,
         }
     }
 
@@ -437,10 +416,9 @@ fn mat_at<'a, T: DataType>(mat: &'a Mat, event: &Event) -> &'a T {
         .expect("Mat error")
 }
 
-#[derive(Default, Clone)]
+#[derive(Default)]
 pub struct BlurInfo {
     pub blurred_image: Mat,
-    latent_image: Mat,
     exposure_begin_t: i64,
     exposure_end_t: i64,
     pub init: bool, // TODO: not very rusty
@@ -451,18 +429,9 @@ impl BlurInfo {
         image: Mat,
         exposure_begin_t: i64,
         exposure_end_t: i64,
-        t_shift: i64,
-        _interval_t: i64,
-        height: i32,
-        width: i32,
-        _intervals_popped: i32,
     ) -> BlurInfo {
-        let _beg = exposure_begin_t - t_shift;
-        let _end = exposure_end_t - t_shift;
-
         BlurInfo {
             blurred_image: image,
-            latent_image: Mat::zeros(height, width, CV_64F).unwrap().to_mat().unwrap(),
             exposure_begin_t,
             exposure_end_t,
             init: true,
