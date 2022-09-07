@@ -1,4 +1,4 @@
-use crate::event_adder::{BlurInfo, EventAdder};
+use crate::event_adder::{BlurInfo, deblur_image, EventAdder};
 use aedat::base::{Packet, ParseError, Stream};
 use opencv::core::{
     Mat, MatExprTraitConst, MatTrait, MatTraitConst, MatTraitManual, Size, CV_64F, CV_8S, CV_8U,
@@ -10,8 +10,10 @@ use std::collections::VecDeque;
 use std::{io, mem};
 use std::io::Write;
 use std::path::Path;
+use std::thread::spawn;
 use std::time::Instant;
 use simple_error::SimpleError;
+use crossbeam_utils::thread;
 
 #[derive(Default)]
 pub struct BlurredInput {
@@ -19,6 +21,8 @@ pub struct BlurredInput {
     pub exposure_begin_t: i64,
     pub exposure_end_t: i64,
 }
+unsafe impl Sync for Reconstructor {}
+unsafe impl Send for Reconstructor {}
 
 pub struct Reconstructor {
     show_display: bool,
@@ -86,66 +90,20 @@ impl Reconstructor {
             ),
             latent_image_queue: VecDeque::new(),
         };
-        r.fill_packet_queue_to_frame().unwrap();
+        let blur_info = fill_packet_queue_to_frame(
+            &mut r.aedat_decoder,
+            &mut r.packet_queue,
+            r.height as i32,
+            r.width as i32,
+        ).unwrap();
+        r.event_adder.blur_info = blur_info;
 
         r
     }
 
-    /// Read packets until the next APS frame is reached (inclusive)
-    fn fill_packet_queue_to_frame(&mut self) -> Result<(), SimpleError> {
-        loop {
-            match self.aedat_decoder.next() {
-                Some(Ok(p)) => {
-                    if p.stream_id == aedat::base::StreamContent::Frame as u32 {
-                        let frame =
-                            match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer) {
-                                Ok(result) => result,
-                                Err(_) => {
-                                    panic!("the packet does not have a size prefix");
-                                }
-                            };
-                        let mut mat_8u = Mat::zeros(self.height as i32, self.width as i32, CV_8U)
-                            .unwrap()
-                            .to_mat()
-                            .unwrap();
-                        let bytes = mat_8u.data_bytes_mut().unwrap();
-                        for (idx, px) in bytes.iter_mut().enumerate() {
-                            *px = frame.pixels().unwrap()[idx];
-                        }
-                        let mut mat_64f = Mat::default();
-                        mat_8u
-                            .convert_to(&mut mat_64f, CV_64F, 1.0 / 255.0, 0.0)
-                            .unwrap();
-
-                        let blur_info = BlurInfo::new(
-                            mat_64f,
-                            frame.exposure_begin_t(),
-                            frame.exposure_end_t(),
-                        );
-                        match self.event_adder.blur_info.init {
-                            false => {
-                                self.event_adder.blur_info = blur_info;
-                            }
-                            true => {
-                                self.event_adder.next_blur_info = blur_info;
-                            }
-                        }
-                        // self.event_adder.blur_info = blur_info;
-
-                        // show_display_force("blurred input", &self.event_adder.blur_info.blurred_image, 1, false);
-                        return Ok(());
-                    } else if p.stream_id == aedat::base::StreamContent::Events as u32 {
-                        self.packet_queue.push_back(p);
-                    }
-                }
-                Some(Err(e)) => panic!("{}", e),
-                None => return Err(SimpleError::new("End of aedat file"))
-            }
-        }
-    }
-
     /// Generates reconstructed images from the next packet of events
-    fn get_more_images(&mut self) {
+    fn get_more_images(&mut self) -> Result<(), SimpleError>{
+
         loop {
             // match self.aedat_decoder.next().unwrap() {
             match self.packet_queue.pop_front() {
@@ -158,17 +116,101 @@ impl Reconstructor {
                         println!("debug 2")
                     }
                 },
-                _ => match self.event_adder.deblur_image() {
-                    None => {
-                        panic!("No images returned from deblur call")
-                    }
-                    Some(frames) => {
-                        self.latent_image_queue.append(&mut VecDeque::from(frames));
-                        self.event_adder.reset_event_queues();
-                        break;
-                    }
-                },
+                _ => {
+                    break;
+                }
             }
+        }
+
+        match thread::scope(|s| {
+            let join_handle = s.spawn(|_| {
+                deblur_image(&self.event_adder)
+            });
+
+            let next_blur_info = match fill_packet_queue_to_frame(
+                &mut self.aedat_decoder,
+                &mut self.packet_queue,
+                self.height as i32,
+                self.width as i32,
+            ) {
+                Ok(blur_info) => { Some(blur_info) },
+                Err(_) => None
+            };
+
+            (join_handle.join().unwrap(), next_blur_info)
+        }) {
+            Ok((None, _)) => {
+                panic!("No images returned from deblur call")
+            }
+            Ok((Some(deblur_return), Some(next_blur_info))) => {
+                self.event_adder.latent_image = deblur_return.ret_vec.last().unwrap().clone();
+                self.event_adder.last_interval_start_timestamp = deblur_return.last_interval_start_timestamp;
+                self.latent_image_queue.append(&mut VecDeque::from(deblur_return.ret_vec));
+                self.event_adder.reset_event_queues();
+                self.event_adder.next_blur_info = next_blur_info;
+            }
+            _ => {
+                return Err(SimpleError::new("End of aedat file"))
+            }
+        };
+
+        Ok(())
+    }
+}
+
+/// Read packets until the next APS frame is reached (inclusive)
+fn fill_packet_queue_to_frame(
+    aedat_decoder: &mut aedat::base::Decoder,
+    packet_queue: &mut VecDeque<Packet>,
+    height: i32,
+    width: i32) -> Result<BlurInfo, SimpleError> {
+    loop {
+        match aedat_decoder.next() {
+            Some(Ok(p)) => {
+                if p.stream_id == aedat::base::StreamContent::Frame as u32 {
+                    let frame =
+                        match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer) {
+                            Ok(result) => result,
+                            Err(_) => {
+                                panic!("the packet does not have a size prefix");
+                            }
+                        };
+                    let mut mat_8u = Mat::zeros(height, width, CV_8U)
+                        .unwrap()
+                        .to_mat()
+                        .unwrap();
+                    let bytes = mat_8u.data_bytes_mut().unwrap();
+                    for (idx, px) in bytes.iter_mut().enumerate() {
+                        *px = frame.pixels().unwrap()[idx];
+                    }
+                    let mut mat_64f = Mat::default();
+                    mat_8u
+                        .convert_to(&mut mat_64f, CV_64F, 1.0 / 255.0, 0.0)
+                        .unwrap();
+
+                    let blur_info = BlurInfo::new(
+                        mat_64f,
+                        frame.exposure_begin_t(),
+                        frame.exposure_end_t(),
+                    );
+                    // match self.event_adder.blur_info.init {
+                    //     false => {
+                    //         self.event_adder.blur_info = blur_info;
+                    //     }
+                    //     true => {
+                    //         self.event_adder.next_blur_info = blur_info;
+                    //     }
+                    // }
+                    // self.event_adder.blur_info = blur_info;
+
+                    // show_display_force("blurred input", &self.event_adder.blur_info.blurred_image, 1, false);
+                    return Ok(blur_info);
+                } else if p.stream_id == aedat::base::StreamContent::Events as u32 {
+                    packet_queue.push_back(p);
+                }
+            }
+            Some(Err(e)) => panic!("{}", e),
+            None => return Err(SimpleError::new("End of aedat file"))
         }
     }
 }
@@ -221,7 +263,16 @@ impl Iterator for Reconstructor {
                     mem::swap(&mut self.event_adder.blur_info, &mut self.event_adder.next_blur_info);
                     self.event_adder.next_blur_info.init = false;
                 }
-                self.get_more_images();
+                //
+                //     self.fill_packet_queue_to_frame()
+
+
+                // let join_handle: thread::JoinHandle<_> = thread::spawn(|| {
+                match self.get_more_images() {
+                    Ok(_) => {}
+                    Err(_) => return None
+                };
+                // });
                 print!(
                     "\r{} frames in  {}ms",
                     self.latent_image_queue.len(),
@@ -237,10 +288,15 @@ impl Iterator for Reconstructor {
                         // After reaching this point, immediately call it again in thread (maybe
                         // a few times?), so that it runs in the background. This will help hide
                         // the latency
-                        match self.fill_packet_queue_to_frame() {
-                            Ok(_) => {},
-                            Err(_) => return None
-                        };
+                        // match fill_packet_queue_to_frame(
+                        //     &mut self.aedat_decoder,
+                        //     &mut self.packet_queue,
+                        //     self.height as i32,
+                        //     self.width as i32,
+                        // ) {
+                        //     Ok(_) => {},
+                        //     Err(_) => return None
+                        // };
                         return Some(Ok(image));
                     }
                 }
