@@ -8,6 +8,7 @@ use aedat::events_generated::Event;
 use opencv::core::{abs, bitwise_or, BORDER_DEFAULT, count_non_zero, CV_64F, CV_8U, div_mat_f64, div_mat_mat, div_mat_matexpr, ElemMul, exp, log, Mat, MatExprTraitConst, MatTrait, MatTraitConst, max, mean, min_max_idx, no_array, NORM_MINMAX, Point, Point_, Scalar, Size, sqrt, sub_mat_scalar, sub_scalar_mat, sum_elems};
 use opencv::imgproc::{dilate, erode, get_structuring_element, MORPH_CROSS, MORPH_OPEN, MORPH_RECT, morphology_ex, sobel, THRESH_BINARY, threshold};
 use crate::reconstructor::{BlurredInput, show_display_force};
+use rayon::iter::{FromParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
 
 pub struct EventAdderNew {
@@ -38,6 +39,9 @@ pub struct EventAdderNew {
     optimize_c: bool,
     event_count: i64, // TODO: for debuggin only
 }
+
+unsafe impl Send for EventAdderNew {}
+unsafe impl Sync for EventAdderNew {}
 
 impl EventAdderNew {
     pub fn new(height: usize, width:usize, t_shift: i64, output_frame_length: i64, start_c: f64, optimize_c: bool) -> EventAdderNew {
@@ -117,11 +121,11 @@ impl EventAdderNew {
 
 
         // Make a vec of these timestamps so we can (eventually) iterate them concurrently
-        let mut interval_start_timestamps = vec![interval_beginning_start];
+        let mut interval_start_timestamps = vec![(interval_beginning_start, Mat::default())];
         let mut current_ts = interval_beginning_start + self.interval_t;
         loop {
             if current_ts <= interval_end_start {
-                interval_start_timestamps.push(current_ts);
+                interval_start_timestamps.push((current_ts, Mat::default()));
                 current_ts += self.interval_t;
             } else {
                 break;
@@ -130,17 +134,25 @@ impl EventAdderNew {
 
 
 
-        let mut ret_vec = Vec::with_capacity(interval_start_timestamps.len());
-        for timestamp_start in interval_start_timestamps {
+
+        let mut now = Instant::now();
+        interval_start_timestamps.par_iter_mut().for_each(|(timestamp_start, mat)|  {
             // let c = optimize_c()
             let c = 0.15;
-            let mut now = Instant::now();
-            ret_vec.push(self.get_latent_and_edge(c, timestamp_start));
-            println!(
-                "\rFrame in  {}ms",
-                now.elapsed().as_millis()
-            );
+            *mat = self.get_latent_and_edge(c, *timestamp_start);
+
+        });
+
+        let mut ret_vec = Vec::with_capacity(interval_start_timestamps.len());
+        for elem in interval_start_timestamps {
+            ret_vec.push(elem.1)
         }
+
+        println!(
+            "\r{} frames in  {}ms",
+            ret_vec.len(),
+            now.elapsed().as_millis()
+        );
 
         self.latent_image = ret_vec.last().unwrap().clone();
 
@@ -240,6 +252,8 @@ fn event_polarity_float(event: &Event) -> f64 {
 }
 
 use opencv::core::DataType;
+use rayon::iter::IntoParallelRefIterator;
+
 fn mat_at_mut<'a, T: DataType>(mat: &'a mut Mat, event: &Event) -> &'a mut T {
     mat.at_2d_mut(event.y().into(), event.x().into()).expect("Mat error")
 }
