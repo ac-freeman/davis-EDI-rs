@@ -209,7 +209,8 @@ impl EventAdder {
             // if self.event_before_queue[end_index+1].t() > timestamp_start {
             //     start_index = end_index;
             // }
-            if self.event_before_queue[end_index + 1].t() > timestamp_start + self.interval_t {
+            if end_index + 1 == self.event_before_queue.len()
+                || self.event_before_queue[end_index + 1].t() > timestamp_start + self.interval_t {
                 break;
             }
             end_index += 1;
@@ -255,7 +256,8 @@ impl EventAdder {
         // TODO: Need to avoid having to traverse the whole queue each time?
         let mut start_index = 0;
         loop {
-            if self.event_during_queue[start_index + 1].t() > timestamp_start {
+            if start_index + 1 == self.event_during_queue.len()
+                || self.event_during_queue[start_index + 1].t() > timestamp_start {
                 break;
             }
             start_index += 1;

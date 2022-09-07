@@ -11,6 +11,7 @@ use std::io;
 use std::io::Write;
 use std::path::Path;
 use std::time::Instant;
+use simple_error::SimpleError;
 
 // TODO: find this through optimization
 // pub const C_THRES: f64 = 0.2;
@@ -104,10 +105,10 @@ impl Reconstructor {
     }
 
     /// Read packets until the next APS frame is reached (inclusive)
-    fn fill_packet_queue_to_frame(&mut self) {
+    fn fill_packet_queue_to_frame(&mut self) -> Result<(), SimpleError> {
         loop {
-            match self.aedat_decoder.next().unwrap() {
-                Ok(p) => {
+            match self.aedat_decoder.next() {
+                Some(Ok(p)) => {
                     if p.stream_id == aedat::base::StreamContent::Frame as u32 {
                         let frame =
                             match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer) {
@@ -150,12 +151,13 @@ impl Reconstructor {
                         self.event_adder.blur_info = blur_info;
 
                         // show_display_force("blurred input", &self.event_adder.blur_info.blurred_image, 1, false);
-                        return;
+                        return Ok(());
                     } else if p.stream_id == aedat::base::StreamContent::Events as u32 {
                         self.packet_queue.push_back(p);
                     }
                 }
-                Err(e) => panic!("{}", e),
+                Some(Err(e)) => panic!("{}", e),
+                None => return Err(SimpleError::new("End of aedat file"))
             }
         }
     }
@@ -249,7 +251,10 @@ impl Iterator for Reconstructor {
                         // After reaching this point, immediately call it again in thread (maybe
                         // a few times?), so that it runs in the background. This will help hide
                         // the latency
-                        self.fill_packet_queue_to_frame();
+                        match self.fill_packet_queue_to_frame() {
+                            Ok(_) => {},
+                            Err(_) => return None
+                        };
                         return Some(Ok(image));
                     }
                 }

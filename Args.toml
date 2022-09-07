@@ -4,4 +4,4 @@ events_filename = "dvSave-2022_05_31_12_53_47.aedat4"
 start_c = 0.15
 optimize_c = 0
 show_display = 1
-output_fps = 1000
+output_fps = 100
