@@ -10,6 +10,9 @@ use opencv::core::{
 
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
+const FIB: [f64; 22] = [1.0, 1.0, 2.0, 3.0, 5.0, 8.0, 13.0, 21.0, 34.0, 55.0, 89.0, 144.0, 233.0, 377.0, 610.0, 987.0, 1597.0, 2584.0,
+    4181.0, 6765.0, 10946.0, 17711.0];
+
 pub struct DeblurReturn {
     pub(crate) last_interval_start_timestamp: i64,
     pub(crate) ret_vec: Vec<Mat>
@@ -157,7 +160,52 @@ impl EventAdder {
         event_counter
     }
 
-    fn get_latent_and_edge(&self, c: f64, timestamp_start: i64) -> Mat {
+
+    // TODO: Vary the rate of optimizing c based on the reconstruction frame rate (vs the target fps)
+    pub(crate) fn optimize_c(&self, timestamp_start: i64) -> f64 {
+        // Fibonacci search
+        let mut a: f64 = 0.0;
+        let mut b: f64 = 1.0;
+        let n_points = 30.0;
+        let mut fib_index = 3;
+        while FIB[fib_index] < n_points {
+            fib_index += 1;
+        }
+
+        let mut x1 = a + FIB[fib_index - 2] / FIB[fib_index] * (b-a);
+        let mut x2 = b - FIB[fib_index - 2] / FIB[fib_index] * (b-a);
+        let mut fx1 = self.get_phi(x1, timestamp_start);
+        let mut fx2 = self.get_phi(x2, timestamp_start);
+
+        for k in 1..fib_index-2 {
+            if fx1 < fx2 {
+                b = x2;
+                x2 = x1;
+                fx2 = fx1;
+                x1 = a + FIB[fib_index - k - 1] / FIB[fib_index - k + 1] * (b-a);
+                fx1 = self.get_phi(x1, timestamp_start);
+            } else {
+                a = x1;
+                x1 = x2;
+                fx1 = fx2;
+                x2 = b - FIB[fib_index - k - 1] / FIB[fib_index - k + 1] * (b-a);
+                fx2 = self.get_phi(x2, timestamp_start);
+            }
+        }
+        return 0.15;
+        return if fx1 < fx2 {
+            x1
+        } else {
+            x2
+        }
+    }
+
+    fn get_phi(&self, c: f64, timestamp_start: i64) -> f64 {
+        let (latent_image, edge_image) = self.get_latent_and_edge(c, timestamp_start);
+        1.0
+    }
+
+    fn get_latent_and_edge(&self, c: f64, timestamp_start: i64) -> (Mat, Mat) {
         if self.event_during_queue.is_empty() {
             panic!("No during queue")
         }
@@ -306,7 +354,7 @@ impl EventAdder {
         .unwrap();
 
         // show_display_force("latent", &latent_image, 1, false);
-        latent_image
+        (latent_image, edge_image)
     }
 }
 
@@ -371,8 +419,11 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
     interval_start_timestamps
         .par_iter_mut()
         .for_each(|(timestamp_start, mat)| {
-            // let c = optimize_c()
-            *mat = event_adder.get_latent_and_edge(event_adder.current_c, *timestamp_start);
+            let c = match event_adder.optimize_c {
+                true => {event_adder.optimize_c(*timestamp_start)},
+                false => {event_adder.current_c}
+            };
+            *mat = event_adder.get_latent_and_edge(c, *timestamp_start).0
         });
 
     // let mut ret_vec = Vec::with_capacity(interval_start_timestamps.len());

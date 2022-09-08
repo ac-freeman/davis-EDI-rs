@@ -10,7 +10,6 @@ use std::collections::VecDeque;
 use std::{io, mem};
 use std::io::Write;
 use std::path::Path;
-use std::thread::spawn;
 use std::time::Instant;
 use simple_error::SimpleError;
 use crossbeam_utils::thread;
