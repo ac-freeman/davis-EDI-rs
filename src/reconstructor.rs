@@ -10,7 +10,6 @@ use std::collections::VecDeque;
 use std::{io, mem};
 use std::io::Write;
 use std::path::Path;
-use std::thread::spawn;
 use std::time::Instant;
 use simple_error::SimpleError;
 use crossbeam_utils::thread;
@@ -148,6 +147,7 @@ impl Reconstructor {
                 self.latent_image_queue.append(&mut VecDeque::from(deblur_return.ret_vec));
                 self.event_adder.reset_event_queues();
                 self.event_adder.next_blur_info = next_blur_info;
+                self.event_adder.current_c = deblur_return.found_c;
             }
             _ => {
                 return Err(SimpleError::new("End of aedat file"))
@@ -273,10 +273,13 @@ impl Iterator for Reconstructor {
                     Err(_) => return None
                 };
                 // });
+                let running_fps = self.latent_image_queue.len() as f64
+                    / now.elapsed().as_millis() as f64 * 1000.0;
                 print!(
-                    "\r{} frames in  {}ms",
+                    "\r{} frames in  {}ms -- Current FPS: {:.2}",
                     self.latent_image_queue.len(),
-                    now.elapsed().as_millis()
+                    now.elapsed().as_millis(),
+                    running_fps
                 );
                 io::stdout().flush().unwrap();
                 match self.latent_image_queue.pop_front() {
@@ -284,19 +287,6 @@ impl Iterator for Reconstructor {
                         panic!("No images in the returned queue")
                     }
                     Some(image) => {
-                        // TODO: Split this off so that it can execute in its own thread.
-                        // After reaching this point, immediately call it again in thread (maybe
-                        // a few times?), so that it runs in the background. This will help hide
-                        // the latency
-                        // match fill_packet_queue_to_frame(
-                        //     &mut self.aedat_decoder,
-                        //     &mut self.packet_queue,
-                        //     self.height as i32,
-                        //     self.width as i32,
-                        // ) {
-                        //     Ok(_) => {},
-                        //     Err(_) => return None
-                        // };
                         return Some(Ok(image));
                     }
                 }
