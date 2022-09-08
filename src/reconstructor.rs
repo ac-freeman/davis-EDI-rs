@@ -203,7 +203,7 @@ fn fill_packet_queue_to_frame(
                     // }
                     // self.event_adder.blur_info = blur_info;
 
-                    // show_display_force("blurred input", &self.event_adder.blur_info.blurred_image, 1, false);
+                    // _show_display_force("blurred input", &blur_info.blurred_image, 1, false);
                     return Ok(blur_info);
                 } else if p.stream_id == aedat::base::StreamContent::Events as u32 {
                     packet_queue.push_back(p);

@@ -202,9 +202,11 @@ impl EventAdder {
                     * (event.t() as f64 - *mat_at::<f64>(&timestamps, event));
 
             *mat_at_mut::<f64>(&mut event_counter, event) += event_polarity_float(event);
-            *mat_at_mut::<f64>(&mut edge_image, event) += event_polarity_float(event)
-                * c
-                * (-(event.t() as f64 - *mat_at::<f64>(&timestamps, event))).exp();
+            if self.optimize_c {
+                *mat_at_mut::<f64>(&mut edge_image, event) += event_polarity_float(event)
+                    * c
+                    * (-(event.t() as f64 - *mat_at::<f64>(&timestamps, event))).exp();
+            }
             *mat_at_mut::<f64>(&mut timestamps, event) = event.t() as f64;
         }
         let mut event_counter_exp = Mat::default();
@@ -255,9 +257,12 @@ impl EventAdder {
                     * (*mat_at::<f64>(&timestamps, event) - event.t() as f64);
 
             *mat_at_mut::<f64>(&mut event_counter, event) -= event_polarity_float(event);
-            *mat_at_mut::<f64>(&mut edge_image, event) -= event_polarity_float(event)
-                * c
-                * (-(*mat_at::<f64>(&timestamps, event) - event.t() as f64)).exp();
+
+            if self.optimize_c {
+                *mat_at_mut::<f64>(&mut edge_image, event) -= event_polarity_float(event)
+                    * c
+                    * (-(*mat_at::<f64>(&timestamps, event) - event.t() as f64)).exp();
+            }
             *mat_at_mut::<f64>(&mut timestamps, event) = event.t() as f64;
         }
         event_counter_exp = Mat::default();
@@ -303,27 +308,6 @@ impl EventAdder {
         // show_display_force("latent", &latent_image, 1, false);
         latent_image
     }
-
-    // fn make_log(&self, mat: &Mat) -> Mat {
-    //     let mut log_mat = Mat::zeros(self.height as i32, self.width as i32, CV_64F).unwrap().to_mat().unwrap();
-    //     for i in 0..self.height as i32 {
-    //         for j in 0..self.width as i32 {
-    //             let px = mat.at_2d::<f64>(i, j).unwrap();
-    //             let log_px = log_mat.at_2d_mut::<f64>(i, j).unwrap();
-    //             *log_px = match px.ln() {
-    //                 a if a == f64::NEG_INFINITY => {
-    //                     0.0
-    //                 }
-    //                 a if a == f64::INFINITY => {
-    //                     panic!("Positive infinity value")
-    //                 }
-    //                 a if a == f64::
-    //                 a => { a }
-    //             };
-    //         }
-    //     }
-    //     log_mat
-    // }
 }
 
 pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
