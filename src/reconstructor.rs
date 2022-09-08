@@ -272,10 +272,13 @@ impl Iterator for Reconstructor {
                     Err(_) => return None
                 };
                 // });
+                let running_fps = self.latent_image_queue.len() as f64
+                    / now.elapsed().as_millis() as f64 * 1000.0;
                 print!(
-                    "\r{} frames in  {}ms",
+                    "\r{} frames in  {}ms -- Current FPS: {:.2}",
                     self.latent_image_queue.len(),
-                    now.elapsed().as_millis()
+                    now.elapsed().as_millis(),
+                    running_fps
                 );
                 io::stdout().flush().unwrap();
                 match self.latent_image_queue.pop_front() {
