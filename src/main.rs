@@ -1,12 +1,14 @@
-use std::error::Error;
-use crate::reconstructor::{ReconstructionError, Reconstructor, show_display};
+extern crate core;
+
+use crate::reconstructor::{show_display, Reconstructor};
 use clap::Parser;
-use opencv::core::{CV_8U, Mat, MatTraitConst};
-use serde;
+use std::error::Error;
+use std::time::Instant;
+
 use serde::Deserialize;
 
-mod reconstructor;
 mod event_adder;
+mod reconstructor;
 
 #[derive(Parser, Debug, Deserialize, Default)]
 pub struct Args {
@@ -55,22 +57,39 @@ fn main() -> Result<(), Box<dyn Error>> {
         args.show_display != 0,
         args.output_fps,
     );
+    let mut last_time = Instant::now();
+    let first_time = last_time;
+    let mut frame_count = 0;
     loop {
         match reconstructor.next() {
-            None => {}
+            None => {
+                println!("\nFinished!");
+                break;
+            }
             Some(image) => {
+                frame_count += 1;
                 let image = match image {
-                    Ok(a) => {a}
-                    Err(_) => {panic!("No image")}
+                    Ok(a) => a,
+                    Err(_) => {
+                        panic!("No image")
+                    }
                 };
-                let mut mat_8u = Mat::default();
-                image.convert_to(&mut mat_8u, CV_8U, 1.0, 0.0).unwrap();
+                // let mut mat_8u = Mat::default();
+                // image.convert_to(&mut mat_8u, CV_8U, 255.0, 0.0).unwrap();
 
-                // Iterate through images by pressing a key on keyboard. To iterate automatically,
-                // change `wait` to 1
-                show_display("RETURNED", &mat_8u, 1, &reconstructor);
+                // Don't refresh the window more than 60 Hz
+                if (Instant::now() - last_time).as_millis() > 16 {
+                    last_time = Instant::now();
+                    // Iterate through images by pressing a key on keyboard. To iterate automatically,
+                    // change `wait` to 1
+                    show_display("RETURNED", &image, 1, &reconstructor);
+                }
             }
         }
     }
+    println!("Reconstructed {} frames in {} seconds, at an average {} FPS",
+             frame_count,
+             (Instant::now() - first_time).as_secs(),
+             frame_count as f32 / (Instant::now() - first_time).as_secs_f32());
     Ok(())
 }
