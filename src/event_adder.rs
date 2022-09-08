@@ -3,10 +3,7 @@ use std::ops::Mul;
 
 use aedat::base::Packet;
 use aedat::events_generated::Event;
-use opencv::core::{
-    div_mat_f64, div_mat_matexpr, exp, sub_mat_scalar, sub_scalar_mat, ElemMul, Mat,
-    MatExprTraitConst, MatTrait, MatTraitConst, Scalar, CV_64F,
-};
+use opencv::core::{div_mat_f64, div_mat_matexpr, exp, sub_mat_scalar, sub_scalar_mat, ElemMul, Mat, MatExprTraitConst, MatTrait, MatTraitConst, Scalar, CV_64F, add_weighted, BORDER_DEFAULT, no_array, normalize, NORM_MINMAX, sum_elems};
 
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
@@ -15,7 +12,8 @@ const FIB: [f64; 22] = [1.0, 1.0, 2.0, 3.0, 5.0, 8.0, 13.0, 21.0, 34.0, 55.0, 89
 
 pub struct DeblurReturn {
     pub(crate) last_interval_start_timestamp: i64,
-    pub(crate) ret_vec: Vec<Mat>
+    pub(crate) ret_vec: Vec<Mat>,
+    pub(crate) found_c: f64,
 }
 
 pub struct EventAdder {
@@ -36,7 +34,7 @@ pub struct EventAdder {
     pub(crate) latent_image: Mat,
     pub(crate) blur_info: BlurInfo,
     pub(crate) next_blur_info: BlurInfo,
-    current_c: f64,
+    pub(crate) current_c: f64,
     optimize_c: bool,
 }
 
@@ -164,9 +162,9 @@ impl EventAdder {
     // TODO: Vary the rate of optimizing c based on the reconstruction frame rate (vs the target fps)
     pub(crate) fn optimize_c(&self, timestamp_start: i64) -> f64 {
         // Fibonacci search
-        let mut a: f64 = 0.0;
-        let mut b: f64 = 1.0;
-        let n_points = 30.0;
+        let mut a: f64 = 0.1;
+        let mut b: f64 = 0.5;
+        let n_points = 15.0;
         let mut fib_index = 3;
         while FIB[fib_index] < n_points {
             fib_index += 1;
@@ -192,17 +190,71 @@ impl EventAdder {
                 fx2 = self.get_phi(x2, timestamp_start);
             }
         }
-        return 0.15;
         return if fx1 < fx2 {
+            dbg!(x1);
             x1
         } else {
+            dbg!(x2);
             x2
         }
     }
 
     fn get_phi(&self, c: f64, timestamp_start: i64) -> f64 {
-        let (latent_image, edge_image) = self.get_latent_and_edge(c, timestamp_start);
-        1.0
+        let (latent_image, mt_image) = self.get_latent_and_edge(c, timestamp_start);
+        // _show_display_force("mt_image", &mt_image, 1, true);
+
+        let (latent_grad, latent_edges) = self.get_gradient_and_edges(latent_image);
+        let (_mt_grad, mt_edges) = self.get_gradient_and_edges(mt_image);
+
+
+        // _show_display_force("mt_edges", &mt_edges, 0, false);
+
+        let phi_edge = sum_elems(
+            &latent_edges.elem_mul(mt_edges)
+                .into_result().unwrap().to_mat().unwrap()).unwrap().0[0];
+        // dbg!(phi_edge);
+
+        let phi_tv = sum_elems(&latent_grad).unwrap().0[0];
+        // dbg!(phi_tv);
+
+        let phi = 0.2 * phi_tv - phi_edge;
+        // dbg!(phi);
+        phi
+    }
+
+    fn get_gradient_and_edges(&self, mut image: Mat) -> (Mat, Mat) {
+        let mut image_sobel_x = Mat::default();
+        sobel(&image, &mut image_sobel_x, CV_64F, 1, 0, 3,
+              1.0, 0.0, BORDER_DEFAULT).expect("Sobel error");
+        // _show_display_force("sobel_x", &latent_image_sobel_x, 0, true);
+
+        let mut image_sobel_y = Mat::default();
+        sobel(&image, &mut image_sobel_y, CV_64F, 0, 1, 3,
+              1.0, 0.0, BORDER_DEFAULT).expect("Sobel error");
+        // _show_display_force("sobel_x", &latent_image_sobel_y, 0, true);
+
+
+        add_weighted(&image_sobel_x, 0.5, &image_sobel_y, 0.5,
+                     0.0, &mut image, -1).expect("weighted error");
+        let mut norm = Mat::default();
+        normalize(&image, &mut norm, 0.0, 1.0,
+                  NORM_MINMAX, -1, &no_array()).expect("Norm error");
+
+
+        // _show_display_force("Weighted", &norm, 1, false);
+
+        let mut thresholded = Mat::default();
+        let mut thresholded_inv = Mat::default();
+        // let mut threshold_val = mean(&norm, &no_array()).unwrap().0[0];
+        // let tmp = threshold_val;
+        // threshold_val = threshold_val + (1.0 - threshold_val) / 2.0;
+        threshold(&norm, &mut thresholded, 0.8, 1.0, THRESH_BINARY).unwrap();
+        threshold(&norm, &mut thresholded_inv, 0.3, 1.0, THRESH_BINARY_INV).unwrap();
+        // _show_display_force("inverse", &thresholded_inv, 0, false);
+        image = (thresholded + thresholded_inv).into_result().unwrap().to_mat().unwrap();
+        // _show_display_force("edges", &image, 1, false);
+
+        (norm, image)
     }
 
     fn get_latent_and_edge(&self, c: f64, timestamp_start: i64) -> (Mat, Mat) {
@@ -252,8 +304,8 @@ impl EventAdder {
             *mat_at_mut::<f64>(&mut event_counter, event) += event_polarity_float(event);
             if self.optimize_c {
                 *mat_at_mut::<f64>(&mut edge_image, event) += event_polarity_float(event)
-                    * c
-                    * (-(event.t() as f64 - *mat_at::<f64>(&timestamps, event))).exp();
+                    // * c
+                    * (-((event.t() as f64 - *mat_at::<f64>(&timestamps, event)))/1000000.0).exp();
             }
             *mat_at_mut::<f64>(&mut timestamps, event) = event.t() as f64;
         }
@@ -308,8 +360,8 @@ impl EventAdder {
 
             if self.optimize_c {
                 *mat_at_mut::<f64>(&mut edge_image, event) -= event_polarity_float(event)
-                    * c
-                    * (-(*mat_at::<f64>(&timestamps, event) - event.t() as f64)).exp();
+                    // * c
+                    * (-((*mat_at::<f64>(&timestamps, event) - event.t() as f64))/1000000.0).exp();
             }
             *mat_at_mut::<f64>(&mut timestamps, event) = event.t() as f64;
         }
@@ -405,11 +457,11 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
     ////////////////////////
 
     // Make a vec of these timestamps so we can (eventually) iterate them concurrently
-    let mut interval_start_timestamps = vec![(interval_beginning_start, Mat::default())];
+    let mut interval_start_timestamps = vec![(interval_beginning_start, Mat::default(), 0.0)];
     let mut current_ts = interval_beginning_start + event_adder.interval_t;
     loop {
         if current_ts <= interval_end_start {
-            interval_start_timestamps.push((current_ts, Mat::default()));
+            interval_start_timestamps.push((current_ts, Mat::default(), event_adder.current_c));
             current_ts += event_adder.interval_t;
         } else {
             break;
@@ -418,17 +470,18 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
 
     interval_start_timestamps
         .par_iter_mut()
-        .for_each(|(timestamp_start, mat)| {
+        .for_each(|(timestamp_start, mat, found_c)| {
             let c = match event_adder.optimize_c {
                 true => {event_adder.optimize_c(*timestamp_start)},
                 false => {event_adder.current_c}
             };
+            *found_c = c;
             *mat = event_adder.get_latent_and_edge(c, *timestamp_start).0
         });
 
     // let mut ret_vec = Vec::with_capacity(interval_start_timestamps.len());
     // self.last_interval_start_timestamp = interval_start_timestamps.last().unwrap().0;
-    let last_interval_start_timestamp = interval_start_timestamps.last().unwrap().0;
+    let last_interval = interval_start_timestamps.last().unwrap().clone();
     for elem in interval_start_timestamps {
         ret_vec.push(elem.1)
     }
@@ -436,8 +489,9 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
     // self.latent_image = ret_vec.last().unwrap().clone();
 
     Some(DeblurReturn {
-        last_interval_start_timestamp,
-        ret_vec
+        last_interval_start_timestamp: last_interval.0,
+        ret_vec,
+        found_c: last_interval.2
     })
 }
 
@@ -450,6 +504,8 @@ fn event_polarity_float(event: &Event) -> f64 {
 }
 
 use opencv::core::DataType;
+use opencv::imgproc::{sobel, THRESH_BINARY, THRESH_BINARY_INV, threshold};
+use crate::reconstructor::_show_display_force;
 
 fn mat_at_mut<'a, T: DataType>(mat: &'a mut Mat, event: &Event) -> &'a mut T {
     mat.at_2d_mut(event.y().into(), event.x().into())

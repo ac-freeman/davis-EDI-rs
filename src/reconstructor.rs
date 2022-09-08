@@ -147,6 +147,7 @@ impl Reconstructor {
                 self.latent_image_queue.append(&mut VecDeque::from(deblur_return.ret_vec));
                 self.event_adder.reset_event_queues();
                 self.event_adder.next_blur_info = next_blur_info;
+                self.event_adder.current_c = deblur_return.found_c;
             }
             _ => {
                 return Err(SimpleError::new("End of aedat file"))
@@ -286,19 +287,6 @@ impl Iterator for Reconstructor {
                         panic!("No images in the returned queue")
                     }
                     Some(image) => {
-                        // TODO: Split this off so that it can execute in its own thread.
-                        // After reaching this point, immediately call it again in thread (maybe
-                        // a few times?), so that it runs in the background. This will help hide
-                        // the latency
-                        // match fill_packet_queue_to_frame(
-                        //     &mut self.aedat_decoder,
-                        //     &mut self.packet_queue,
-                        //     self.height as i32,
-                        //     self.width as i32,
-                        // ) {
-                        //     Ok(_) => {},
-                        //     Err(_) => return None
-                        // };
                         return Some(Ok(image));
                     }
                 }
