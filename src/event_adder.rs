@@ -339,84 +339,91 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
 
 
 
-    // The beginning time for interval 0. Probably before the blurred image exposure beginning time
-    let interval_beginning_start =
-        ((blur_info.exposure_begin_t) / event_adder.interval_t) * event_adder.interval_t;
-    let interval_end_start =
-        ((blur_info.exposure_end_t) / event_adder.interval_t) * event_adder.interval_t;
-    let mut ret_vec = Vec::with_capacity(
-        ((interval_end_start - interval_beginning_start) / event_adder.interval_t) as usize * 2,
-    );
+        // The beginning time for interval 0. Probably before the blurred image exposure beginning time
+        let interval_beginning_start =
+            ((blur_info.exposure_begin_t) / event_adder.interval_t) * event_adder.interval_t;
+        let interval_end_start =
+            ((blur_info.exposure_end_t) / event_adder.interval_t) * event_adder.interval_t;
+        let mut ret_vec = Vec::with_capacity(
+            ((interval_end_start - interval_beginning_start) / event_adder.interval_t) as usize * 2,
+        );
 
-    ////////////////////////
-    // First, do the queue'd up events preceding this image. These intermediate images
-    // are based on the most recent deblurred latent image
-    if event_adder.last_interval_start_timestamp > 0 {
-        let mut intermediate_interval_start_timestamps = vec![(
-            event_adder.last_interval_start_timestamp + event_adder.interval_t,
-            Mat::default(),
-        )];
-        let mut current_ts = intermediate_interval_start_timestamps[0].0 + event_adder.interval_t;
+        ////////////////////////
+        // First, do the queue'd up events preceding this image. These intermediate images
+        // are based on the most recent deblurred latent image
+        if event_adder.last_interval_start_timestamp > 0 {
+            let mut intermediate_interval_start_timestamps = vec![(
+                event_adder.last_interval_start_timestamp + event_adder.interval_t,
+                Mat::default(),
+            )];
+            let mut current_ts = intermediate_interval_start_timestamps[0].0 + event_adder.interval_t;
+            loop {
+                if current_ts < interval_beginning_start {
+                    intermediate_interval_start_timestamps.push((current_ts, Mat::default()));
+                    current_ts += event_adder.interval_t;
+                } else {
+                    break;
+                }
+            }
+
+            intermediate_interval_start_timestamps
+                .par_iter_mut()
+                .for_each(|(timestamp_start, mat)| {
+                    // let c = optimize_c()
+                    *mat = event_adder.get_intermediate_image(event_adder.current_c, *timestamp_start);
+                });
+
+            for elem in intermediate_interval_start_timestamps {
+                ret_vec.push(elem.1)
+            }
+        }
+
+        ////////////////////////
+
+        // Naturally handle the case where the input image is relatively sharp
+        if interval_beginning_start >= blur_info.exposure_end_t {
+            panic!("Bad interval")
+        }
+
+        // Make a vec of these timestamps so we can iterate them concurrently
+        let mut interval_start_timestamps = vec![(interval_beginning_start, Mat::default(), 0.0)];
+        let mut current_ts = interval_beginning_start + event_adder.interval_t;
         loop {
-            if current_ts < interval_beginning_start {
-                intermediate_interval_start_timestamps.push((current_ts, Mat::default()));
+            if current_ts <= interval_end_start {
+                interval_start_timestamps.push((current_ts, Mat::default(), event_adder.current_c));
                 current_ts += event_adder.interval_t;
             } else {
                 break;
             }
         }
 
-        intermediate_interval_start_timestamps
+
+
+        interval_start_timestamps
             .par_iter_mut()
-            .for_each(|(timestamp_start, mat)| {
-                // let c = optimize_c()
-                *mat = event_adder.get_intermediate_image(event_adder.current_c, *timestamp_start);
+            .for_each(|(timestamp_start, mat, found_c)| {
+                let c = match event_adder.optimize_c {
+                    true => {event_adder.optimize_c(*timestamp_start)},
+                    false => {event_adder.current_c}
+                };
+                *found_c = c;
+                *mat =  event_adder.get_latent_and_edge(c, *timestamp_start).0
             });
 
-        for elem in intermediate_interval_start_timestamps {
+        // let mut ret_vec = Vec::with_capacity(interval_start_timestamps.len());
+        // self.last_interval_start_timestamp = interval_start_timestamps.last().unwrap().0;
+        let last_interval = interval_start_timestamps.last().unwrap().clone();
+        for elem in interval_start_timestamps {
             ret_vec.push(elem.1)
         }
-    }
 
-    ////////////////////////
+        // self.latent_image = ret_vec.last().unwrap().clone();
 
-    // Make a vec of these timestamps so we can (eventually) iterate them concurrently
-    let mut interval_start_timestamps = vec![(interval_beginning_start, Mat::default(), 0.0)];
-    let mut current_ts = interval_beginning_start + event_adder.interval_t;
-    loop {
-        if current_ts <= interval_end_start {
-            interval_start_timestamps.push((current_ts, Mat::default(), event_adder.current_c));
-            current_ts += event_adder.interval_t;
-        } else {
-            break;
-        }
-    }
-
-    interval_start_timestamps
-        .par_iter_mut()
-        .for_each(|(timestamp_start, mat, found_c)| {
-            let c = match event_adder.optimize_c {
-                true => {event_adder.optimize_c(*timestamp_start)},
-                false => {event_adder.current_c}
-            };
-            *found_c = c;
-            *mat =  event_adder.get_latent_and_edge(c, *timestamp_start).0
-        });
-
-    // let mut ret_vec = Vec::with_capacity(interval_start_timestamps.len());
-    // self.last_interval_start_timestamp = interval_start_timestamps.last().unwrap().0;
-    let last_interval = interval_start_timestamps.last().unwrap().clone();
-    for elem in interval_start_timestamps {
-        ret_vec.push(elem.1)
-    }
-
-    // self.latent_image = ret_vec.last().unwrap().clone();
-
-    Some(DeblurReturn {
-        last_interval_start_timestamp: last_interval.0,
-        ret_vec,
-        found_c: last_interval.2
-    })
+        Some(DeblurReturn {
+            last_interval_start_timestamp: last_interval.0,
+            ret_vec,
+            found_c: last_interval.2
+        })
     } else {
         None
     }

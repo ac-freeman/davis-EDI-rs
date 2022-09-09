@@ -14,6 +14,7 @@ use std::time::Instant;
 use simple_error::SimpleError;
 use crossbeam_utils::thread;
 use nalgebra::DMatrix;
+use cv_convert::TryFromCv;
 
 #[derive(Default)]
 pub struct BlurredInput {
@@ -26,6 +27,7 @@ unsafe impl Send for Reconstructor {}
 
 pub struct Reconstructor {
     show_display: bool,
+    show_blurred_display: bool,
     aedat_decoder: aedat::base::Decoder,
     height: usize,
     width: usize,
@@ -41,6 +43,7 @@ impl Reconstructor {
         start_c: f64,
         optimize_c: bool,
         display: bool,
+        blurred_display: bool,
         output_fps: f64,
     ) -> Reconstructor {
         let mut aedat_decoder =
@@ -77,6 +80,7 @@ impl Reconstructor {
 
         let mut r = Reconstructor {
             show_display: display,
+            show_blurred_display: blurred_display,
             aedat_decoder,
             height: height as usize,
             width: width as usize,
@@ -118,6 +122,10 @@ impl Reconstructor {
 
         match thread::scope(|s| {
             let join_handle = s.spawn(|_| {
+                if self.show_blurred_display {
+                    let tmp_blurred_mat = Mat::try_from_cv(&self.event_adder.blur_info.as_ref().unwrap().blurred_image).unwrap();
+                    _show_display_force("blurred input", &tmp_blurred_mat, 1, false);
+                }
                 deblur_image(&self.event_adder)
             });
 
@@ -185,7 +193,6 @@ fn fill_packet_queue_to_frame(
                         frame.exposure_end_t(),
                     );
 
-                    // _show_display_force("blurred input", &blur_info.blurred_image, 1, false);
                     return Ok(blur_info);
                 } else if p.stream_id == aedat::base::StreamContent::Events as u32 {
                     packet_queue.push_back(p);
@@ -259,10 +266,11 @@ impl Iterator for Reconstructor {
                 let running_fps = self.latent_image_queue.len() as f64
                     / now.elapsed().as_millis() as f64 * 1000.0;
                 print!(
-                    "\r{} frames in  {}ms -- Current FPS: {:.2}",
+                    "\r{} frames in  {}ms -- Current FPS: {:.2}, Current c: {:.5}",
                     self.latent_image_queue.len(),
                     now.elapsed().as_millis(),
-                    running_fps
+                    running_fps,
+                    self.event_adder.current_c
                 );
                 io::stdout().flush().unwrap();
                 match self.latent_image_queue.pop_front() {
