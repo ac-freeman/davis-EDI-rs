@@ -13,6 +13,7 @@ use std::path::Path;
 use std::time::Instant;
 use simple_error::SimpleError;
 use crossbeam_utils::thread;
+use nalgebra::DMatrix;
 
 #[derive(Default)]
 pub struct BlurredInput {
@@ -95,7 +96,7 @@ impl Reconstructor {
             r.height as i32,
             r.width as i32,
         ).unwrap();
-        r.event_adder.blur_info = blur_info;
+        r.event_adder.blur_info = Some(blur_info);
 
         r
     }
@@ -140,7 +141,7 @@ impl Reconstructor {
                 self.event_adder.last_interval_start_timestamp = deblur_return.last_interval_start_timestamp;
                 self.latent_image_queue.append(&mut VecDeque::from(deblur_return.ret_vec));
                 self.event_adder.reset_event_queues();
-                self.event_adder.next_blur_info = next_blur_info;
+                self.event_adder.next_blur_info = Some(next_blur_info);
                 self.event_adder.current_c = deblur_return.found_c;
             }
             _ => {
@@ -169,33 +170,20 @@ fn fill_packet_queue_to_frame(
                                 panic!("the packet does not have a size prefix");
                             }
                         };
-                    let mut mat_8u = Mat::zeros(height, width, CV_8U)
-                        .unwrap()
-                        .to_mat()
-                        .unwrap();
-                    let bytes = mat_8u.data_bytes_mut().unwrap();
-                    for (idx, px) in bytes.iter_mut().enumerate() {
-                        *px = frame.pixels().unwrap()[idx];
+
+                    let frame_px = frame.pixels().unwrap();
+                    let mut image = DMatrix::<f64>::zeros(height as usize, width as usize);
+                    for (row_idx, mut im_row) in image.row_iter_mut().enumerate() {
+                        for (col_idx, im_px) in im_row.iter_mut().enumerate() {
+                            *im_px = frame_px[row_idx * width as usize + col_idx] as f64 / 255.0;
+                        }
                     }
-                    let mut mat_64f = Mat::default();
-                    mat_8u
-                        .convert_to(&mut mat_64f, CV_64F, 1.0 / 255.0, 0.0)
-                        .unwrap();
 
                     let blur_info = BlurInfo::new(
-                        mat_64f,
+                        image,
                         frame.exposure_begin_t(),
                         frame.exposure_end_t(),
                     );
-                    // match self.event_adder.blur_info.init {
-                    //     false => {
-                    //         self.event_adder.blur_info = blur_info;
-                    //     }
-                    //     true => {
-                    //         self.event_adder.next_blur_info = blur_info;
-                    //     }
-                    // }
-                    // self.event_adder.blur_info = blur_info;
 
                     // _show_display_force("blurred input", &blur_info.blurred_image, 1, false);
                     return Ok(blur_info);
@@ -253,9 +241,10 @@ impl Iterator for Reconstructor {
             // Else we need to rebuild the queue
             _ => {
                 let now = Instant::now();
-                if self.event_adder.next_blur_info.init {
+
+                if self.event_adder.next_blur_info.is_some() {
                     mem::swap(&mut self.event_adder.blur_info, &mut self.event_adder.next_blur_info);
-                    self.event_adder.next_blur_info.init = false;
+                    self.event_adder.next_blur_info = None;
                 }
                 //
                 //     self.fill_packet_queue_to_frame()

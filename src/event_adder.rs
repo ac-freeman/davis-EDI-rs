@@ -34,8 +34,8 @@ pub struct EventAdder {
     width: i32,
     pub(crate) last_interval_start_timestamp: i64,
     pub(crate) latent_image: Mat,
-    pub(crate) blur_info: BlurInfo,
-    pub(crate) next_blur_info: BlurInfo,
+    pub(crate) blur_info: Option<BlurInfo>,
+    pub(crate) next_blur_info: Option<BlurInfo>,
     pub(crate) current_c: f64,
     optimize_c: bool,
 }
@@ -63,7 +63,7 @@ impl EventAdder {
                 .unwrap()
                 .to_mat()
                 .unwrap(),
-            blur_info: Default::default(),
+            blur_info: None,
             next_blur_info: Default::default(),
             current_c: start_c,
             optimize_c,
@@ -71,6 +71,10 @@ impl EventAdder {
     }
 
     pub fn sort_events(&mut self, packet: Packet) {
+        let blur_info = match &self.blur_info {
+            None => { panic!("blur_info not initialized")}
+            Some(a) => {a}
+        };
         let event_packet =
             match aedat::events_generated::size_prefixed_root_as_event_packet(&packet.buffer) {
                 Ok(result) => result,
@@ -86,10 +90,10 @@ impl EventAdder {
 
         for event in event_arr {
             match event.t() {
-                a if a < self.blur_info.exposure_begin_t => {
+                a if a < blur_info.exposure_begin_t => {
                     self.event_before_queue.push(*event);
                 }
-                a if a > self.blur_info.exposure_end_t => {
+                a if a > blur_info.exposure_end_t => {
                     self.event_after_queue.push(*event);
                 }
                 _ => {
@@ -210,8 +214,7 @@ impl EventAdder {
         0.14 * phi_tv - phi_edge
     }
 
-    fn get_gradient_and_edges(&self, image: OMatrix::<f64, Dynamic, Dynamic>) -> (Mat, Mat) {
-        let image = Mat::try_from_cv(image).unwrap();
+    fn get_gradient_and_edges(&self, image: Mat) -> (Mat, Mat) {
         let mut image_sobel_x = Mat::default();
         sobel(&image, &mut image_sobel_x, CV_64F, 1, 0, 3,
               1.0, 0.0, BORDER_DEFAULT).expect("Sobel error");
@@ -237,7 +240,7 @@ impl EventAdder {
         (grad, thresholded)
     }
 
-    fn get_latent_and_edge(&self, c: f64, timestamp_start: i64) -> (OMatrix::<f64, Dynamic, Dynamic>, OMatrix::<f64, Dynamic, Dynamic>) {
+    fn get_latent_and_edge(&self, c: f64, timestamp_start: i64) -> (Mat, Mat) {
         if self.event_during_queue.is_empty() {
             panic!("No during queue")
         }
@@ -321,25 +324,26 @@ impl EventAdder {
 
         latent_image.div_assign( self.event_during_queue.last().unwrap().t() as f64
             - self.event_during_queue[0].t() as f64);
-        let blurred_image = OMatrix::<f64, Dynamic, Dynamic>::try_from_cv(&self.blur_info.blurred_image).unwrap();
+        let blurred_image = &self.blur_info.as_ref().unwrap().blurred_image;
         latent_image = blurred_image.component_div(&latent_image);
 
         // show_display_force("latent", &latent_image, 1, false);
-        (latent_image, edge_image)
+        (Mat::try_from_cv(latent_image).unwrap(), Mat::try_from_cv(edge_image).unwrap())
 
     }
 }
 
 pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
-    if !event_adder.blur_info.init {
-        return None;
-    }
+    if let Some(blur_info) = &event_adder.blur_info {
+
+
+
 
     // The beginning time for interval 0. Probably before the blurred image exposure beginning time
     let interval_beginning_start =
-        ((event_adder.blur_info.exposure_begin_t) / event_adder.interval_t) * event_adder.interval_t;
+        ((blur_info.exposure_begin_t) / event_adder.interval_t) * event_adder.interval_t;
     let interval_end_start =
-        ((event_adder.blur_info.exposure_end_t) / event_adder.interval_t) * event_adder.interval_t;
+        ((blur_info.exposure_end_t) / event_adder.interval_t) * event_adder.interval_t;
     let mut ret_vec = Vec::with_capacity(
         ((interval_end_start - interval_beginning_start) / event_adder.interval_t) as usize * 2,
     );
@@ -396,7 +400,7 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
                 false => {event_adder.current_c}
             };
             *found_c = c;
-            *mat =  Mat::try_from_cv(event_adder.get_latent_and_edge(c, *timestamp_start).0).unwrap()
+            *mat =  event_adder.get_latent_and_edge(c, *timestamp_start).0
         });
 
     // let mut ret_vec = Vec::with_capacity(interval_start_timestamps.len());
@@ -413,6 +417,9 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
         ret_vec,
         found_c: last_interval.2
     })
+    } else {
+        return None
+    }
 }
 
 
@@ -427,9 +434,8 @@ fn event_polarity_float(event: &Event) -> f64 {
 use opencv::imgproc::{sobel, THRESH_BINARY, threshold};
 
 
-#[derive(Default)]
 pub struct BlurInfo {
-    pub blurred_image: Mat,
+    pub blurred_image: OMatrix<f64, Dynamic, Dynamic>,
     exposure_begin_t: i64,
     exposure_end_t: i64,
     pub init: bool, // TODO: not very rusty
@@ -437,7 +443,7 @@ pub struct BlurInfo {
 
 impl BlurInfo {
     pub fn new(
-        image: Mat,
+        image: OMatrix<f64, Dynamic, Dynamic>,
         exposure_begin_t: i64,
         exposure_end_t: i64,
     ) -> BlurInfo {
