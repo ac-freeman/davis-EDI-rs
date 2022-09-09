@@ -1,6 +1,6 @@
 use std::mem;
 use std::ops::{AddAssign, DivAssign, MulAssign};
-use nalgebra::{DMatrix, Dynamic, min, OMatrix};
+use nalgebra::{DMatrix, Dynamic, OMatrix};
 use aedat::base::Packet;
 use aedat::events_generated::Event;
 use opencv::core::{ElemMul, Mat, MatExprTraitConst, CV_64F, BORDER_DEFAULT, no_array, normalize, NORM_MINMAX, sum_elems, sqrt, mean};
