@@ -103,10 +103,8 @@ impl Reconstructor {
     /// Generates reconstructed images from the next packet of events
     fn get_more_images(&mut self) -> Result<(), SimpleError>{
 
-        loop {
-            // match self.aedat_decoder.next().unwrap() {
-            match self.packet_queue.pop_front() {
-                Some(p) => match p.stream_id {
+        while let Some(p) = self.packet_queue.pop_front() {
+            match p.stream_id {
                     a if a == aedat::base::StreamContent::Frame as u32 => {}
                     a if a == aedat::base::StreamContent::Events as u32 => {
                         self.event_adder.sort_events(p);
@@ -114,10 +112,6 @@ impl Reconstructor {
                     _ => {
                         println!("debug 2")
                     }
-                },
-                _ => {
-                    break;
-                }
             }
         }
 

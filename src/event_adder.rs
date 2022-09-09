@@ -1,11 +1,11 @@
 use std::mem;
-use std::ops::{AddAssign, DivAssign, Mul, MulAssign};
-use nalgebra::{DMatrix, Dynamic, OMatrix, U2, U3};
+use std::ops::{AddAssign, DivAssign, MulAssign};
+use nalgebra::{DMatrix, Dynamic, OMatrix};
 use aedat::base::Packet;
 use aedat::events_generated::Event;
-use opencv::core::{div_mat_f64, div_mat_matexpr, exp, sub_mat_scalar, sub_scalar_mat, ElemMul, Mat, MatExprTraitConst, MatTrait, MatTraitConst, Scalar, CV_64F, add_weighted, BORDER_DEFAULT, no_array, normalize, NORM_MINMAX, sum_elems, sqrt, mean};
-use cv_convert::{FromCv, IntoCv, TryFromCv, TryIntoCv};
-use opencv as cv;
+use opencv::core::{ElemMul, Mat, MatExprTraitConst, CV_64F, BORDER_DEFAULT, no_array, normalize, NORM_MINMAX, sum_elems, sqrt, mean};
+use cv_convert::{TryFromCv};
+
 
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
@@ -130,7 +130,6 @@ impl EventAdder {
             event_counter[(y, x)] += event_polarity_float(event);
         }
 
-        let mut ret_mat = self.latent_image.clone();
         // L^tilde(t) = L^tilde(f) + cE(t)
         // Take the exp of L^tilde(t) to get L(t), the final latent image
         event_counter.mul_assign(c);
@@ -138,7 +137,7 @@ impl EventAdder {
         let event_counter_mat = Mat::try_from_cv(event_counter).unwrap();
 
 
-        ret_mat = self
+        let ret_mat = self
             .latent_image
             .clone()
             .elem_mul(&event_counter_mat)
@@ -182,7 +181,7 @@ impl EventAdder {
                 fx2 = self.get_phi(x2, timestamp_start);
             }
         }
-        return if fx1 < fx2 {
+        if fx1 < fx2 {
             x1
         } else {
             x2
@@ -206,12 +205,12 @@ impl EventAdder {
         let phi_tv = sum_elems(&latent_grad).unwrap().0[0];
         // dbg!(phi_tv);
 
-        let phi = 0.14 * phi_tv - phi_edge;
+        
         // dbg!(phi);
-        phi
+        0.14 * phi_tv - phi_edge
     }
 
-    fn get_gradient_and_edges(&self, mut image: OMatrix::<f64, Dynamic, Dynamic>) -> (Mat, Mat) {
+    fn get_gradient_and_edges(&self, image: OMatrix::<f64, Dynamic, Dynamic>) -> (Mat, Mat) {
         let image = Mat::try_from_cv(image).unwrap();
         let mut image_sobel_x = Mat::default();
         sobel(&image, &mut image_sobel_x, CV_64F, 1, 0, 3,
@@ -424,9 +423,9 @@ fn event_polarity_float(event: &Event) -> f64 {
     }
 }
 
-use opencv::core::DataType;
-use opencv::imgproc::{sobel, THRESH_BINARY, THRESH_BINARY_INV, threshold};
-use crate::reconstructor::_show_display_force;
+
+use opencv::imgproc::{sobel, THRESH_BINARY, threshold};
+
 
 #[derive(Default)]
 pub struct BlurInfo {
