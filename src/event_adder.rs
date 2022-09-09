@@ -329,7 +329,17 @@ impl EventAdder {
         let blurred_image = &self.blur_info.as_ref().unwrap().blurred_image;
         latent_image = blurred_image.component_div(&latent_image);
 
-        latent_image = latent_image.map(|x: f64| x.min(1.1));
+        for (latent_px, blurred_px) in latent_image.iter_mut().zip(blurred_image.iter()) {
+            if *latent_px > 1.1 {
+                *latent_px = 1.1;
+            } else if *latent_px <= 0.0 {
+                if *blurred_px == 1.0 {
+                    *latent_px = 1.0;
+                } else {
+                    *latent_px = 0.0;
+                }
+            }
+        }
 
         // show_display_force("latent", &latent_image, 1, false);
         (Mat::try_from_cv(latent_image).unwrap(), Mat::try_from_cv(edge_image).unwrap())
