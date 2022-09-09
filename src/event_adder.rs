@@ -329,6 +329,10 @@ impl EventAdder {
         let blurred_image = &self.blur_info.as_ref().unwrap().blurred_image;
         latent_image = blurred_image.component_div(&latent_image);
 
+        // The last gathered latent image might get completely black pixels if there are some
+        // negative polarity events right near the end of the exposure time. This looks unreasonably
+        // bad, so I'm fixing it manually here. It's likely due to some DVS pixels firing slightly
+        // sooner than others for the same kind of intensity change.
         for (latent_px, blurred_px) in latent_image.iter_mut().zip(blurred_image.iter()) {
             if *latent_px > 1.1 {
                 *latent_px = 1.1;
