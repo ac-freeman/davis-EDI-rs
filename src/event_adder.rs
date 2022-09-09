@@ -121,35 +121,33 @@ impl EventAdder {
             end_index += 1;
         }
 
-        let mut event_counter = Mat::zeros(self.height, self.width, CV_64F)
-            .unwrap()
-            .to_mat()
-            .unwrap();
+        let mut event_counter = DMatrix::<f64>::zeros(self.height as usize, self.width as usize);
+
+        let (mut y, mut x);
         for event in &self.event_before_queue[start_index..end_index] {
-            *mat_at_mut::<f64>(&mut event_counter, event) += event_polarity_float(event);
+            y = event.y() as usize;
+            x = event.x() as usize;
+            event_counter[(y, x)] += event_polarity_float(event);
         }
 
-        let mut tmp_mat = self.latent_image.clone();
+        let mut ret_mat = self.latent_image.clone();
         // L^tilde(t) = L^tilde(f) + cE(t)
         // Take the exp of L^tilde(t) to get L(t), the final latent image
-        event_counter = event_counter
-            .clone()
-            .mul(c)
-            .into_result()
-            .unwrap()
-            .to_mat()
-            .unwrap();
-        exp(&event_counter, &mut tmp_mat).unwrap();
-        event_counter = self
+        event_counter.mul_assign(c);
+        event_counter = event_counter.map(|x: f64| x.exp());
+        let event_counter_mat = Mat::try_from_cv(event_counter).unwrap();
+
+
+        ret_mat = self
             .latent_image
             .clone()
-            .elem_mul(&tmp_mat)
+            .elem_mul(&event_counter_mat)
             .into_result()
             .unwrap()
             .to_mat()
             .unwrap();
 
-        event_counter
+        ret_mat
     }
 
 
@@ -261,7 +259,7 @@ impl EventAdder {
         let mut timestamps = latent_image.clone();
         timestamps.add_scalar_mut(timestamp_start as f64);
 
-        let (mut y, mut x) = (0,0);
+        let (mut y, mut x);
         // Events occurring AFTER this timestamp
         for event in &self.event_during_queue[start_index..] {
             y = event.y() as usize;
@@ -429,16 +427,6 @@ fn event_polarity_float(event: &Event) -> f64 {
 use opencv::core::DataType;
 use opencv::imgproc::{sobel, THRESH_BINARY, THRESH_BINARY_INV, threshold};
 use crate::reconstructor::_show_display_force;
-
-fn mat_at_mut<'a, T: DataType>(mat: &'a mut Mat, event: &Event) -> &'a mut T {
-    mat.at_2d_mut(event.y().into(), event.x().into())
-        .expect("Mat error")
-}
-
-fn mat_at<'a, T: DataType>(mat: &'a Mat, event: &Event) -> &'a T {
-    mat.at_2d(event.y().into(), event.x().into())
-        .expect("Mat error")
-}
 
 #[derive(Default)]
 pub struct BlurInfo {

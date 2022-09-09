@@ -3,5 +3,5 @@ base_path = "/media/andrew/ExternalM2/DynamicVision/"
 events_filename = "dvSave-2022_05_31_12_53_47.aedat4"
 start_c = 0.12344322344322345
 optimize_c = 0
-show_display = 1
+show_display = 0
 output_fps = 1000
