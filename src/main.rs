@@ -1,5 +1,3 @@
-extern crate core;
-
 use crate::reconstructor::{show_display, Reconstructor};
 use clap::Parser;
 use std::error::Error;
@@ -37,6 +35,10 @@ pub struct Args {
     #[clap(short, long, default_value_t = 1)]
     pub(crate) show_display: i32,
 
+    /// Show live view display for the blurry input APS images? (0=no, 1=yes)
+    #[clap(long, default_value_t = 0)]
+    pub(crate) show_blurred_display: i32,
+
     /// Output frames per second. Assume that the input file has microsecond subdivision,
     /// i.e., 1000000 ticks per second. Then each output frame will constitute 1000000/[FPS] ticks
     #[clap(short, long, default_value_t = 100.0)]
@@ -55,6 +57,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         args.start_c,
         args.optimize_c != 0,
         args.show_display != 0,
+        args.show_blurred_display != 0,
         args.output_fps,
     );
     let mut last_time = Instant::now();
@@ -78,7 +81,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // image.convert_to(&mut mat_8u, CV_8U, 255.0, 0.0).unwrap();
 
                 // Don't refresh the window more than 60 Hz
-                if (Instant::now() - last_time).as_millis() > 16 {
+                if (Instant::now() - last_time).as_millis() > args.output_fps as u128 / 60 {
                     last_time = Instant::now();
                     // Iterate through images by pressing a key on keyboard. To iterate automatically,
                     // change `wait` to 1

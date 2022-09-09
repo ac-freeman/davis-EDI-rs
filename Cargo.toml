@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-opencv = "0.63.1"
+opencv = "0.66.0"
 clap = { version = "3.0.10", features = ["derive"] }
 rayon = "1.5"
 toml = "0.5.8"
@@ -15,6 +15,14 @@ serde = {version = "1.0.136", features = ["derive"]}
 simple-error = "0.2.3"
 crossbeam = "0.8.2"
 crossbeam-utils = "0.8.11"
+nalgebra = "0.31.1"
+
+[dependencies.cv-convert]
+version = '0.20.0'
+features = [
+    'opencv_0-66',
+    'nalgebra_0-31'
+]
 
 [profile.release]
 lto = true
