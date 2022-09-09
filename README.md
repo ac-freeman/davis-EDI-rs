@@ -12,10 +12,13 @@ I did my best to understand and implement the mathematics presented in the origi
 There are some major things left before I can start implementing mEDI. Any assistance from the community would be greatly appreciated
 
 - [ ] Add documentation
-- [ ] Improve performance
+- [x] Improve speed
 - [ ] Make it more Rusty (follow conventions)
-- [ ] **Fix the contrast threshold optimization**
-  - I could really use help with this. My energy function isn't producing great or consistent results. I did my best to replicate the MATLAB functions for getting gradient magnitude and the edge cross correlation, but it's not quite looking like it does in the original paper. ~~For now, the program just uses a hard-coded contrast threshold value.~~ There's a command-line option to enable the contrast threshold optimization, but it works best when input APS images are blurry.
+- [x] Fix the contrast threshold optimization
+  - Special thanks to [Chen Song](https://github.com/chensong1995) for his assistance with this
+- [ ] Add reconstruction from a live camera
+- [ ] Create a controller for when to perform c-value optimization, based on the desired reconstructed frame rate, for real-time applications
+- [ ] Be able to save reconstructed frames as a video easily
 
 ## Requirements
 - Rust 2021 or higher
