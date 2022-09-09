@@ -78,7 +78,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // image.convert_to(&mut mat_8u, CV_8U, 255.0, 0.0).unwrap();
 
                 // Don't refresh the window more than 60 Hz
-                if (Instant::now() - last_time).as_millis() > 16 {
+                if (Instant::now() - last_time).as_millis() > args.output_fps as u128 / 60 {
                     last_time = Instant::now();
                     // Iterate through images by pressing a key on keyboard. To iterate automatically,
                     // change `wait` to 1
