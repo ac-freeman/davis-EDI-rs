@@ -1,6 +1,6 @@
 use std::mem;
 use std::ops::{AddAssign, DivAssign, MulAssign};
-use nalgebra::{DMatrix, Dynamic, OMatrix};
+use nalgebra::{DMatrix, Dynamic, min, OMatrix};
 use aedat::base::Packet;
 use aedat::events_generated::Event;
 use opencv::core::{ElemMul, Mat, MatExprTraitConst, CV_64F, BORDER_DEFAULT, no_array, normalize, NORM_MINMAX, sum_elems, sqrt, mean};
@@ -328,6 +328,8 @@ impl EventAdder {
             - self.event_during_queue[0].t() as f64);
         let blurred_image = &self.blur_info.as_ref().unwrap().blurred_image;
         latent_image = blurred_image.component_div(&latent_image);
+
+        latent_image = latent_image.map(|x: f64| x.min(1.1));
 
         // show_display_force("latent", &latent_image, 1, false);
         (Mat::try_from_cv(latent_image).unwrap(), Mat::try_from_cv(edge_image).unwrap())
