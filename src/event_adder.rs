@@ -141,16 +141,16 @@ impl EventAdder {
         let event_counter_mat = Mat::try_from_cv(event_counter).unwrap();
 
 
-        let ret_mat = self
+        
+
+        self
             .latent_image
             .clone()
             .elem_mul(&event_counter_mat)
             .into_result()
             .unwrap()
             .to_mat()
-            .unwrap();
-
-        ret_mat
+            .unwrap()
     }
 
 
@@ -418,7 +418,7 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
         found_c: last_interval.2
     })
     } else {
-        return None
+        None
     }
 }
 

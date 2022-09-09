@@ -1,7 +1,7 @@
 use crate::event_adder::{BlurInfo, deblur_image, EventAdder};
 use aedat::base::{Packet, ParseError, Stream};
 use opencv::core::{
-    Mat, MatExprTraitConst, MatTrait, MatTraitConst, MatTraitManual, Size, CV_64F, CV_8S, CV_8U,
+    Mat, MatTrait, MatTraitConst, Size, CV_8S,
     NORM_MINMAX,
 };
 use opencv::highgui;
