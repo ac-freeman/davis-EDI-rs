@@ -1,9 +1,11 @@
 use std::mem;
-use std::ops::Mul;
-
+use std::ops::{AddAssign, DivAssign, Mul, MulAssign};
+use nalgebra::{DMatrix, Dynamic, OMatrix, U2, U3};
 use aedat::base::Packet;
 use aedat::events_generated::Event;
 use opencv::core::{div_mat_f64, div_mat_matexpr, exp, sub_mat_scalar, sub_scalar_mat, ElemMul, Mat, MatExprTraitConst, MatTrait, MatTraitConst, Scalar, CV_64F, add_weighted, BORDER_DEFAULT, no_array, normalize, NORM_MINMAX, sum_elems, sqrt, mean};
+use cv_convert::{FromCv, IntoCv, TryFromCv, TryIntoCv};
+use opencv as cv;
 
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
@@ -211,7 +213,8 @@ impl EventAdder {
         phi
     }
 
-    fn get_gradient_and_edges(&self, mut image: Mat) -> (Mat, Mat) {
+    fn get_gradient_and_edges(&self, mut image: OMatrix::<f64, Dynamic, Dynamic>) -> (Mat, Mat) {
+        let image = Mat::try_from_cv(image).unwrap();
         let mut image_sobel_x = Mat::default();
         sobel(&image, &mut image_sobel_x, CV_64F, 1, 0, 3,
               1.0, 0.0, BORDER_DEFAULT).expect("Sobel error");
@@ -237,7 +240,7 @@ impl EventAdder {
         (grad, thresholded)
     }
 
-    fn get_latent_and_edge(&self, c: f64, timestamp_start: i64) -> (Mat, Mat) {
+    fn get_latent_and_edge(&self, c: f64, timestamp_start: i64) -> (OMatrix::<f64, Dynamic, Dynamic>, OMatrix::<f64, Dynamic, Dynamic>) {
         if self.event_during_queue.is_empty() {
             panic!("No during queue")
         }
@@ -251,142 +254,82 @@ impl EventAdder {
             start_index += 1;
         }
 
-        let mut latent_image = Mat::zeros(self.height, self.width, CV_64F)
-            .unwrap()
-            .to_mat()
-            .unwrap();
-        let mut edge_image = Mat::zeros(self.height, self.width, CV_64F)
-            .unwrap()
-            .to_mat()
-            .unwrap();
+        let mut latent_image = DMatrix::<f64>::zeros(self.height as usize, self.width as usize);
+        let mut edge_image = latent_image.clone();
+        //
+        let mut event_counter = latent_image.clone();
+        let mut timestamps = latent_image.clone();
+        timestamps.add_scalar_mut(timestamp_start as f64);
 
-        let mut event_counter = Mat::zeros(self.height, self.width, CV_64F)
-            .unwrap()
-            .to_mat()
-            .unwrap();
-        let mut timestamps = Mat::ones(self.height, self.width, CV_64F)
-            .unwrap()
-            .to_mat()
-            .unwrap();
-        timestamps = timestamps
-            .mul(timestamp_start as f64)
-            .into_result()
-            .unwrap()
-            .to_mat()
-            .unwrap();
-
+        let (mut y, mut x) = (0,0);
         // Events occurring AFTER this timestamp
         for event in &self.event_during_queue[start_index..] {
-            *mat_at_mut::<f64>(&mut latent_image, event) +=
-                (c * *mat_at::<f64>(&event_counter, event)).exp()
-                    * (event.t() as f64 - *mat_at::<f64>(&timestamps, event));
+            y = event.y() as usize;
+            x = event.x() as usize;
+            latent_image[(y, x)] +=
+                (c * event_counter[(y, x)]).exp()
+                    * (event.t() as f64 - timestamps[(y, x)]);
 
-            *mat_at_mut::<f64>(&mut event_counter, event) += event_polarity_float(event);
+            event_counter[(y, x)] += event_polarity_float(event);
+
             if self.optimize_c {
-                *mat_at_mut::<f64>(&mut edge_image, event) += event_polarity_float(event)
+                edge_image[(y, x)] += event_polarity_float(event)
                     // * c
-                    * (-((event.t() as f64 - *mat_at::<f64>(&timestamps, event)))/1000000.0).exp();
+                    * (-(event.t() as f64 - timestamps[(y, x)])/1000000.0).exp();
+
             }
-            *mat_at_mut::<f64>(&mut timestamps, event) = event.t() as f64;
+            timestamps[(y, x)] = event.t() as f64;
         }
-        let mut event_counter_exp = Mat::default();
-        exp(
-            &event_counter
-                .mul(c)
-                .into_result()
-                .unwrap()
-                .to_mat()
-                .unwrap(),
-            &mut event_counter_exp,
-        )
-        .unwrap();
-        latent_image = (latent_image
-            + (event_counter_exp
-                .elem_mul(
-                    sub_scalar_mat(
-                        Scalar::from(self.event_during_queue.last().unwrap().t() as f64),
-                        &timestamps,
-                    )
-                    .unwrap(),
-                )
-                .into_result()
-                .unwrap()))
-        .into_result()
-        .unwrap()
-        .to_mat()
-        .unwrap();
+
+        event_counter.mul_assign(c);
+        event_counter = event_counter.map(|x: f64| x.exp());
+
+        timestamps.mul_assign(-1.0);
+        timestamps.add_scalar_mut(self.event_during_queue.last().unwrap().t() as f64);
+        event_counter.component_mul_assign(&timestamps);
+        latent_image.add_assign(&event_counter);
+
 
         // Events occurring BEFORE this timestamp
-        timestamps = Mat::ones(self.height, self.width, CV_64F)
-            .unwrap()
-            .to_mat()
-            .unwrap();
-        timestamps = timestamps
-            .mul(timestamp_start as f64)
-            .into_result()
-            .unwrap()
-            .to_mat()
-            .unwrap();
-        event_counter = Mat::zeros(self.height, self.width, CV_64F)
-            .unwrap()
-            .to_mat()
-            .unwrap();
-        for event in &self.event_during_queue[..start_index] {
-            *mat_at_mut::<f64>(&mut latent_image, event) +=
-                (c * *mat_at::<f64>(&event_counter, event)).exp()
-                    * (*mat_at::<f64>(&timestamps, event) - event.t() as f64);
 
-            *mat_at_mut::<f64>(&mut event_counter, event) -= event_polarity_float(event);
+        timestamps = DMatrix::<f64>::zeros(self.height as usize, self.width as usize);
+        timestamps.add_scalar_mut(timestamp_start as f64);
+        event_counter = DMatrix::<f64>::zeros(self.height as usize, self.width as usize);
+
+        for event in &self.event_during_queue[..start_index] {
+            y = event.y() as usize;
+            x = event.x() as usize;
+            latent_image[(y, x)] +=
+                (c * event_counter[(y, x)]).exp()
+                    * (timestamps[(y, x)] - event.t() as f64);
+
+            event_counter[(y, x)] -= event_polarity_float(event);
 
             if self.optimize_c {
-                *mat_at_mut::<f64>(&mut edge_image, event) -= event_polarity_float(event)
+                edge_image[(y, x)] -= event_polarity_float(event)
                     // * c
-                    * (-((*mat_at::<f64>(&timestamps, event) - event.t() as f64))/1000000.0).exp();
-            }
-            *mat_at_mut::<f64>(&mut timestamps, event) = event.t() as f64;
-        }
-        event_counter_exp = Mat::default();
-        exp(
-            &event_counter
-                .mul(c)
-                .into_result()
-                .unwrap()
-                .to_mat()
-                .unwrap(),
-            &mut event_counter_exp,
-        )
-        .unwrap();
-        latent_image = (latent_image
-            + (event_counter_exp
-                .elem_mul(
-                    sub_mat_scalar(
-                        &timestamps,
-                        Scalar::from(self.event_during_queue[0].t() as f64),
-                    )
-                    .unwrap(),
-                )
-                .into_result()
-                .unwrap()))
-        .into_result()
-        .unwrap()
-        .to_mat()
-        .unwrap();
+                    * (-(timestamps[(y, x)] - event.t() as f64)/1000000.0).exp();
 
-        latent_image = div_mat_matexpr(
-            &self.blur_info.blurred_image,
-            &div_mat_f64(
-                &latent_image,
-                self.event_during_queue.last().unwrap().t() as f64
-                    - self.event_during_queue[0].t() as f64,
-            )
-            .unwrap(),
-        )
-        .unwrap()
-        .to_mat()
-        .unwrap();
+            }
+
+            timestamps[(y, x)] = event.t() as f64;
+        }
+
+        event_counter.mul_assign(c);
+        event_counter = event_counter.map(|x: f64| x.exp());
+
+        timestamps.add_scalar_mut(-self.event_during_queue[0].t() as f64);
+        event_counter.component_mul_assign(&timestamps);
+        latent_image.add_assign(&event_counter);
+
+        latent_image.div_assign( self.event_during_queue.last().unwrap().t() as f64
+            - self.event_during_queue[0].t() as f64);
+        let blurred_image = OMatrix::<f64, Dynamic, Dynamic>::try_from_cv(&self.blur_info.blurred_image).unwrap();
+        latent_image = blurred_image.component_div(&latent_image);
 
         // show_display_force("latent", &latent_image, 1, false);
         (latent_image, edge_image)
+
     }
 }
 
@@ -456,7 +399,7 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
                 false => {event_adder.current_c}
             };
             *found_c = c;
-            *mat = event_adder.get_latent_and_edge(c, *timestamp_start).0
+            *mat =  Mat::try_from_cv(event_adder.get_latent_and_edge(c, *timestamp_start).0).unwrap()
         });
 
     // let mut ret_vec = Vec::with_capacity(interval_start_timestamps.len());
