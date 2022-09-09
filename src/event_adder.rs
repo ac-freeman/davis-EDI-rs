@@ -276,6 +276,8 @@ impl EventAdder {
                 edge_image[(y, x)] += event_polarity_float(event)
                     // * c
                     * (-(event.t() as f64 - timestamps[(y, x)])/1000000.0).exp();
+                    // We assume a timescale of microseconds as in the original paper;
+                    // i.e., 1e6 microseconds per second
 
             }
             timestamps[(y, x)] = event.t() as f64;
