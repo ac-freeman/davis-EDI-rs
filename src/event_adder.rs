@@ -1,5 +1,5 @@
 use std::mem;
-use std::ops::{AddAssign, DivAssign, MulAssign};
+use std::ops::{AddAssign, DivAssign, MulAssign, SubAssign};
 use nalgebra::{DMatrix, Dynamic, OMatrix};
 use aedat::base::Packet;
 use aedat::events_generated::Event;
@@ -38,6 +38,12 @@ pub struct EventAdder {
     pub(crate) next_blur_info: Option<BlurInfo>,
     pub(crate) current_c: f64,
     optimize_c: bool,
+    mode: Mode
+}
+
+enum Mode {
+    Edi,
+    MEdi,
 }
 
 unsafe impl Send for EventAdder {}
@@ -50,7 +56,12 @@ impl EventAdder {
         output_frame_length: i64,
         start_c: f64,
         optimize_c: bool,
+        m_edi: bool,
     ) -> EventAdder {
+        let mode = match m_edi {
+            false => {Edi},
+            true => {MEdi}
+        };
         EventAdder {
             interval_t: output_frame_length,
             event_before_queue: Vec::new(),
@@ -67,6 +78,7 @@ impl EventAdder {
             next_blur_info: Default::default(),
             current_c: start_c,
             optimize_c,
+            mode
         }
     }
 
@@ -193,7 +205,7 @@ impl EventAdder {
     }
 
     fn get_phi(&self, c: f64, timestamp_start: i64) -> f64 {
-        let (latent_image, mt_image) = self.get_latent_and_edge(c, timestamp_start);
+        let (latent_image, mt_image, _) = self.get_latent_and_edge(c, timestamp_start);
         // _show_display_force("mt_image", &mt_image, 1, true);
 
         let (latent_grad, latent_edges) = self.get_gradient_and_edges(latent_image);
@@ -240,7 +252,22 @@ impl EventAdder {
         (grad, thresholded)
     }
 
-    fn get_latent_and_edge(&self, c: f64, timestamp_start: i64) -> (Mat, Mat) {
+    ////////////////////////////////
+    // mEDI sketch
+    // -- Deblur the image (for a certain timestamp, t) to get a latent intensity image L_i
+    //      -- the deblurring is different than before. Calculated from the next two latent images
+    // -- Multiply L_i by (1/T int(exp(cE(t))dt) to get the reblurred image
+    // -- Calculate the square of the L2 norm. Get the c that minimizes this value
+
+
+
+
+
+
+
+
+
+    fn get_latent_and_edge(&self, c: f64, timestamp_start: i64) -> (Mat, Mat, OMatrix<f64, Dynamic, Dynamic>) {
         if self.event_during_queue.is_empty() {
             panic!("No during queue")
         }
@@ -327,6 +354,7 @@ impl EventAdder {
         latent_image.div_assign( self.event_during_queue.last().unwrap().t() as f64
             - self.event_during_queue[0].t() as f64);
         let blurred_image = &self.blur_info.as_ref().unwrap().blurred_image;
+        let a_exp = latent_image.clone_owned();
         latent_image = blurred_image.component_div(&latent_image);
 
         // The last gathered latent image might get completely black pixels if there are some
@@ -346,8 +374,41 @@ impl EventAdder {
         }
 
         // show_display_force("latent", &latent_image, 1, false);
-        (Mat::try_from_cv(latent_image).unwrap(), Mat::try_from_cv(edge_image).unwrap())
+        (Mat::try_from_cv(latent_image).unwrap(), Mat::try_from_cv(edge_image).unwrap(), a_exp)
 
+    }
+
+    // Simplify math to ?
+    // L1 = L2 - L3 - 2a2 - b2 + b1
+    pub(crate) fn get_latent_and_edge_medi(&self, c: f64, timestamp_start_l1: i64, timestamp_start_l2: i64, timestamp_start_l3: i64) -> (Mat) {
+        let (l_2_mat, b2_mat, mut a2) = self.get_latent_and_edge(c, timestamp_start_l2);
+        let mut l_2: OMatrix<f64, Dynamic, Dynamic> = OMatrix::<f64, Dynamic, Dynamic>::try_from_cv(l_2_mat).unwrap();
+        let l2_copy = l_2.clone_owned();
+        let mut b2: OMatrix<f64, Dynamic, Dynamic> = OMatrix::<f64, Dynamic, Dynamic>::try_from_cv(b2_mat).unwrap();
+
+        // need to take the log of a2_exp
+        for (px) in a2.iter_mut() {
+            if *px == 0.0 {
+                *px = 0.0000000001;
+            }
+            *px = px.ln();
+        }
+
+        let (l_3_mat, _, _) = self.get_latent_and_edge(c, timestamp_start_l3);
+        let l_3: OMatrix<f64, Dynamic, Dynamic> = OMatrix::<f64, Dynamic, Dynamic>::try_from_cv(l_3_mat).unwrap();
+
+        let (_, b1_mat, _) = self.get_latent_and_edge(c, timestamp_start_l1);
+        let mut b1: OMatrix<f64, Dynamic, Dynamic> = OMatrix::<f64, Dynamic, Dynamic>::try_from_cv(b1_mat).unwrap();
+
+        l_2.add_assign(l2_copy);
+        l_2.sub_assign(l_3);
+        l_2.sub_assign(a2.clone_owned());
+        l_2.sub_assign(a2);
+        l_2.sub_assign(b2);
+        l_2.add_assign(b1);
+
+
+        (Mat::try_from_cv(l_2).unwrap())
     }
 }
 
@@ -416,17 +477,66 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
         }
 
 
+        // TODO: better structure
 
-        interval_start_timestamps
-            .par_iter_mut()
-            .for_each(|(timestamp_start, mat, found_c)| {
-                let c = match event_adder.optimize_c {
-                    true => {event_adder.optimize_c(*timestamp_start)},
-                    false => {event_adder.current_c}
-                };
-                *found_c = c;
-                *mat =  event_adder.get_latent_and_edge(c, *timestamp_start).0
-            });
+
+        match event_adder.mode {
+            Edi => {
+                interval_start_timestamps
+                .par_iter_mut()
+                .for_each(|(timestamp_start, mat, found_c)| {
+                    let c = match event_adder.optimize_c {
+                        true => { event_adder.optimize_c(*timestamp_start) },
+                        false => { event_adder.current_c }
+                    };
+                    *found_c = c;
+                    *mat = event_adder.get_latent_and_edge(c, *timestamp_start).0
+                });
+            }
+            MEdi => {
+                for i in 0..interval_start_timestamps.len() {
+                    let found_c = &interval_start_timestamps[i].2;
+                    if i == interval_start_timestamps.len() - 1 {
+                        interval_start_timestamps[i].1 =
+                            event_adder.get_latent_and_edge_medi(
+                                *found_c,
+                                interval_start_timestamps[i].0,
+                                interval_start_timestamps[i].0,
+                                interval_start_timestamps[i].0,
+                            )
+                    }
+                    else if i == interval_start_timestamps.len() - 2 {
+                        interval_start_timestamps[i].1 =
+                            event_adder.get_latent_and_edge_medi(
+                                *found_c,
+                                interval_start_timestamps[i].0,
+                                interval_start_timestamps[i+1].0,
+                                interval_start_timestamps[i+1].0,
+                            )
+                    }
+                    else {
+                        interval_start_timestamps[i].1 =
+                            event_adder.get_latent_and_edge_medi(
+                                *found_c,
+                                interval_start_timestamps[i].0,
+                                interval_start_timestamps[i+1].0,
+                                interval_start_timestamps[i+2].0,
+                            )
+                    }
+                }
+
+                // interval_start_timestamps
+                //     .iter_mut()
+                //     .for_each(|(timestamp_start, mat, found_c)| {
+                //         // let c = match event_adder.optimize_c {
+                //         //     true => { event_adder.optimize_c(*timestamp_start) },
+                //         //     false => { event_adder.current_c }
+                //         // };
+                //         // *found_c = c;
+                //         *mat = event_adder.get_latent_and_edge_medi(*found_c, *timestamp_start).0
+                //     });
+            }
+        }
 
         // let mut ret_vec = Vec::with_capacity(interval_start_timestamps.len());
         // self.last_interval_start_timestamp = interval_start_timestamps.last().unwrap().0;
@@ -457,6 +567,7 @@ fn event_polarity_float(event: &Event) -> f64 {
 
 
 use opencv::imgproc::{sobel, THRESH_BINARY, threshold};
+use crate::event_adder::Mode::{Edi, MEdi};
 
 
 pub struct BlurInfo {

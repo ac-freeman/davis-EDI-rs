@@ -43,6 +43,11 @@ pub struct Args {
     /// i.e., 1000000 ticks per second. Then each output frame will constitute 1000000/[FPS] ticks
     #[clap(short, long, default_value_t = 100.0)]
     pub(crate) output_fps: f64,
+
+    /// Use mEDI method? (0=no, 1=yes)
+    /// Use mEDI instead of EDI method
+    #[clap(long, default_value_t = 1)]
+    pub(crate) m_edi: i32,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -59,6 +64,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         args.show_display != 0,
         args.show_blurred_display != 0,
         args.output_fps,
+        args.m_edi != 0,
     );
     let mut last_time = Instant::now();
     let first_time = last_time;

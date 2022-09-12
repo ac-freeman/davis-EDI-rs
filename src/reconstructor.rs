@@ -45,6 +45,7 @@ impl Reconstructor {
         display: bool,
         blurred_display: bool,
         output_fps: f64,
+        m_edi: bool,
     ) -> Reconstructor {
         let mut aedat_decoder =
             aedat::base::Decoder::new(Path::new(&(directory + "/" + &aedat_filename))).unwrap();
@@ -91,6 +92,7 @@ impl Reconstructor {
                 output_frame_length,
                 start_c,
                 optimize_c,
+                m_edi,
             ),
             latent_image_queue: VecDeque::new(),
         };
