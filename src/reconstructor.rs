@@ -1,4 +1,4 @@
-use crate::event_adder::{BlurInfo, deblur_image, EventAdder};
+use crate::event_adder::{BlurInfo, deblur_image, EventAdder, Mode};
 use aedat::base::{Packet, ParseError, Stream};
 use opencv::core::{
     Mat, MatTrait, MatTraitConst, Size, CV_8S,
@@ -96,13 +96,33 @@ impl Reconstructor {
             ),
             latent_image_queue: VecDeque::new(),
         };
-        let blur_info = fill_packet_queue_to_frame(
+        let blur_info_0 = fill_packet_queue_to_frame(
             &mut r.aedat_decoder,
             &mut r.packet_queue,
             r.height as i32,
             r.width as i32,
         ).unwrap();
-        r.event_adder.blur_info = Some(blur_info);
+        r.event_adder.blur_infos[0] = Some(blur_info_0);
+
+        match r.event_adder.mode {
+            Mode::Edi => {}
+            Mode::MEdi => {
+                let blur_info_1 = fill_packet_queue_to_frame(
+                    &mut r.aedat_decoder,
+                    &mut r.packet_queue,
+                    r.height as i32,
+                    r.width as i32,
+                ).unwrap();
+                r.event_adder.blur_infos[1] = Some(blur_info_1);
+                let blur_info_2 = fill_packet_queue_to_frame(
+                    &mut r.aedat_decoder,
+                    &mut r.packet_queue,
+                    r.height as i32,
+                    r.width as i32,
+                ).unwrap();
+                r.event_adder.blur_infos[2] = Some(blur_info_2);
+            }
+        }
 
         r
     }
@@ -125,7 +145,7 @@ impl Reconstructor {
         match thread::scope(|s| {
             let join_handle = s.spawn(|_| {
                 if self.show_blurred_display {
-                    let tmp_blurred_mat = Mat::try_from_cv(&self.event_adder.blur_info.as_ref().unwrap().blurred_image).unwrap();
+                    let tmp_blurred_mat = Mat::try_from_cv(&self.event_adder.blur_infos[0].as_ref().unwrap().blurred_image).unwrap();
                     _show_display_force("blurred input", &tmp_blurred_mat, 1, false);
                 }
                 deblur_image(&self.event_adder)
@@ -252,8 +272,19 @@ impl Iterator for Reconstructor {
                 let now = Instant::now();
 
                 if self.event_adder.next_blur_info.is_some() {
-                    mem::swap(&mut self.event_adder.blur_info, &mut self.event_adder.next_blur_info);
-                    self.event_adder.next_blur_info = None;
+                    match self.event_adder.mode {
+                        Mode::Edi => {
+                            mem::swap(&mut self.event_adder.blur_infos[0], &mut self.event_adder.next_blur_info);
+                            self.event_adder.next_blur_info = None;
+                        }
+                        Mode::MEdi => {
+                            self.event_adder.blur_infos.swap(0, 1);
+                            self.event_adder.blur_infos.swap(1, 2);
+                            mem::swap(&mut self.event_adder.blur_infos[2], &mut self.event_adder.next_blur_info);
+                            self.event_adder.next_blur_info = None;
+                        }
+                    }
+
                 }
                 //
                 //     self.fill_packet_queue_to_frame()

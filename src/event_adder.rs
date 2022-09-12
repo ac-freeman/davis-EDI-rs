@@ -23,10 +23,10 @@ pub struct EventAdder {
     interval_t: i64,
 
     /// Events occurring before the current blurred image
-    event_before_queue: Vec<Event>,
+    event_before_queues: [Vec<Event>; 3],
 
     /// Events occurring during the current blurred image
-    event_during_queue: Vec<Event>,
+    event_during_queues: [Vec<Event>; 3],
 
     /// Events occurring after the current blurred image
     event_after_queue: Vec<Event>,
@@ -34,14 +34,14 @@ pub struct EventAdder {
     width: i32,
     pub(crate) last_interval_start_timestamp: i64,
     pub(crate) latent_image: Mat,
-    pub(crate) blur_info: Option<BlurInfo>,
+    pub(crate) blur_infos: [Option<BlurInfo>; 3],
     pub(crate) next_blur_info: Option<BlurInfo>,
     pub(crate) current_c: f64,
     optimize_c: bool,
-    mode: Mode
+    pub(crate) mode: Mode
 }
 
-enum Mode {
+pub(crate) enum Mode {
     Edi,
     MEdi,
 }
@@ -64,8 +64,8 @@ impl EventAdder {
         };
         EventAdder {
             interval_t: output_frame_length,
-            event_before_queue: Vec::new(),
-            event_during_queue: Vec::new(),
+            event_before_queues: [Vec::new(), Vec::new(), Vec::new()],
+                event_during_queues: [Vec::new(), Vec::new(), Vec::new()],
             event_after_queue: Vec::new(),
             height: height as i32,
             width: width as i32,
@@ -74,7 +74,7 @@ impl EventAdder {
                 .unwrap()
                 .to_mat()
                 .unwrap(),
-            blur_info: None,
+            blur_infos: [None, None, None],
             next_blur_info: Default::default(),
             current_c: start_c,
             optimize_c,
@@ -83,10 +83,8 @@ impl EventAdder {
     }
 
     pub fn sort_events(&mut self, packet: Packet) {
-        let blur_info = match &self.blur_info {
-            None => { panic!("blur_info not initialized")}
-            Some(a) => {a}
-        };
+
+
         let event_packet =
             match aedat::events_generated::size_prefixed_root_as_event_packet(&packet.buffer) {
                 Ok(result) => result,
@@ -101,28 +99,64 @@ impl EventAdder {
         };
 
         for event in event_arr {
-            match event.t() {
-                a if a < blur_info.exposure_begin_t => {
-                    self.event_before_queue.push(*event);
+            self.sort_event(event, 0);
+        }
+    }
+
+    fn sort_event(&mut self, event: &Event, blur_period: usize) {
+        let blur_info = match &self.blur_infos[blur_period] {
+            None => { panic!("blur_info not initialized")}
+            Some(a) => {a}
+        };
+        match event.t() {
+            a if a < blur_info.exposure_begin_t => {
+                self.event_before_queues[blur_period].push(*event);
+            }
+            a if a > blur_info.exposure_end_t => {
+                match self.mode {
+                    Edi => {
+                        self.event_after_queue.push(*event);
+                    }
+                    MEdi => {
+                        if blur_period < 2 {
+                            self.sort_event(event, blur_period + 1);
+                        }
+                        else {
+                            self.event_after_queue.push(*event);
+                        }
+                    }
                 }
-                a if a > blur_info.exposure_end_t => {
-                    self.event_after_queue.push(*event);
-                }
-                _ => {
-                    self.event_during_queue.push(*event);
-                }
+
+            }
+            _ => {
+                self.event_during_queues[blur_period].push(*event);
             }
         }
     }
 
     pub fn reset_event_queues(&mut self) {
-        mem::swap(&mut self.event_before_queue, &mut self.event_after_queue);
-        self.event_after_queue.clear();
-        self.event_during_queue.clear();
+        match self.mode {
+            Edi => {
+                mem::swap(&mut self.event_before_queues[0], &mut self.event_after_queue);
+                self.event_after_queue.clear();
+                self.event_during_queues[0].clear();
+            }
+            MEdi => {
+                self.event_before_queues.swap(0,1);
+                self.event_before_queues.swap(1,2);
+                mem::swap(&mut self.event_before_queues[2], &mut self.event_after_queue);
+                self.event_after_queue.clear();
+
+                self.event_during_queues.swap(0,1);
+                self.event_during_queues.swap(1,2);
+                self.event_during_queues[2].clear();
+            }
+        }
+
     }
 
     fn get_intermediate_image(&self, c: f64, timestamp_start: i64) -> Mat {
-        if self.event_before_queue.is_empty() {
+        if self.event_before_queues[0].is_empty() {
             panic!("Empty before queue");
         }
 
@@ -130,8 +164,8 @@ impl EventAdder {
         let start_index = 0;
         let mut end_index = 0;
         loop {
-            if end_index + 1 == self.event_before_queue.len()
-                || self.event_before_queue[end_index + 1].t() > timestamp_start + self.interval_t {
+            if end_index + 1 == self.event_before_queues[0].len()
+                || self.event_before_queues[0][end_index + 1].t() > timestamp_start + self.interval_t {
                 break;
             }
             end_index += 1;
@@ -140,7 +174,7 @@ impl EventAdder {
         let mut event_counter = DMatrix::<f64>::zeros(self.height as usize, self.width as usize);
 
         let (mut y, mut x);
-        for event in &self.event_before_queue[start_index..end_index] {
+        for event in &self.event_before_queues[0][start_index..end_index] {
             y = event.y() as usize;
             x = event.x() as usize;
             event_counter[(y, x)] += event_polarity_float(event);
@@ -268,14 +302,14 @@ impl EventAdder {
 
 
     fn get_latent_and_edge(&self, c: f64, timestamp_start: i64) -> (Mat, Mat, OMatrix<f64, Dynamic, Dynamic>) {
-        if self.event_during_queue.is_empty() {
+        if self.event_during_queues[0].is_empty() {
             panic!("No during queue")
         }
         // TODO: Need to avoid having to traverse the whole queue each time?
         let mut start_index = 0;
         loop {
-            if start_index + 1 == self.event_during_queue.len()
-                || self.event_during_queue[start_index + 1].t() > timestamp_start {
+            if start_index + 1 == self.event_during_queues[0].len()
+                || self.event_during_queues[0][start_index + 1].t() > timestamp_start {
                 break;
             }
             start_index += 1;
@@ -290,7 +324,7 @@ impl EventAdder {
 
         let (mut y, mut x);
         // Events occurring AFTER this timestamp
-        for event in &self.event_during_queue[start_index..] {
+        for event in &self.event_during_queues[0][start_index..] {
             y = event.y() as usize;
             x = event.x() as usize;
             latent_image[(y, x)] +=
@@ -314,7 +348,7 @@ impl EventAdder {
         event_counter = event_counter.map(|x: f64| x.exp());
 
         timestamps.mul_assign(-1.0);
-        timestamps.add_scalar_mut(self.event_during_queue.last().unwrap().t() as f64);
+        timestamps.add_scalar_mut(self.event_during_queues[0].last().unwrap().t() as f64);
         event_counter.component_mul_assign(&timestamps);
         latent_image.add_assign(&event_counter);
 
@@ -325,7 +359,7 @@ impl EventAdder {
         timestamps.add_scalar_mut(timestamp_start as f64);
         event_counter = DMatrix::<f64>::zeros(self.height as usize, self.width as usize);
 
-        for event in &self.event_during_queue[..start_index] {
+        for event in &self.event_during_queues[0][..start_index] {
             y = event.y() as usize;
             x = event.x() as usize;
             latent_image[(y, x)] +=
@@ -347,13 +381,13 @@ impl EventAdder {
         event_counter.mul_assign(c);
         event_counter = event_counter.map(|x: f64| x.exp());
 
-        timestamps.add_scalar_mut(-self.event_during_queue[0].t() as f64);
+        timestamps.add_scalar_mut(-self.event_during_queues[0][0].t() as f64);
         event_counter.component_mul_assign(&timestamps);
         latent_image.add_assign(&event_counter);
 
-        latent_image.div_assign( self.event_during_queue.last().unwrap().t() as f64
-            - self.event_during_queue[0].t() as f64);
-        let blurred_image = &self.blur_info.as_ref().unwrap().blurred_image;
+        latent_image.div_assign( self.event_during_queues[0].last().unwrap().t() as f64
+            - self.event_during_queues[0][0].t() as f64);
+        let blurred_image = &self.blur_infos[0].as_ref().unwrap().blurred_image;
         let a_exp = latent_image.clone_owned();
         latent_image = blurred_image.component_div(&latent_image);
 
@@ -378,7 +412,9 @@ impl EventAdder {
 
     }
 
-    // Simplify math to ?
+    // Simplify math?
+    // orig:
+    // L1 = 3L2 - L3 -TB2 - a2 - b2 + b1
     // L1 = L2 - L3 - 2a2 - b2 + b1
     pub(crate) fn get_latent_and_edge_medi(&self, c: f64, timestamp_start_l1: i64, timestamp_start_l2: i64, timestamp_start_l3: i64) -> (Mat) {
         let (l_2_mat, b2_mat, mut a2) = self.get_latent_and_edge(c, timestamp_start_l2);
@@ -403,7 +439,7 @@ impl EventAdder {
         l_2.add_assign(l2_copy);
         l_2.sub_assign(l_3);
         l_2.sub_assign(a2.clone_owned());
-        l_2.sub_assign(a2);
+        // l_2.sub_assign(a2);
         l_2.sub_assign(b2);
         l_2.add_assign(b1);
 
@@ -413,8 +449,14 @@ impl EventAdder {
 }
 
 pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
-    if let Some(blur_info) = &event_adder.blur_info {
-
+    if let Some(blur_info) = &event_adder.blur_infos[0] {
+        match event_adder.mode {
+            Edi => {}
+            MEdi => {
+                assert!(event_adder.blur_infos[1].is_some());
+                assert!(event_adder.blur_infos[2].is_some());
+            }
+        }
 
 
 
@@ -453,7 +495,7 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
                 });
 
             for elem in intermediate_interval_start_timestamps {
-                ret_vec.push(elem.1)
+                // ret_vec.push(elem.1)
             }
         }
 
