@@ -4,7 +4,7 @@ use nalgebra::{DMatrix, Dynamic, OMatrix};
 use aedat::base::Packet;
 use aedat::events_generated::Event;
 use opencv::core::{ElemMul, Mat, MatExprTraitConst, CV_64F, BORDER_DEFAULT, no_array, normalize, NORM_MINMAX, sum_elems, sqrt, mean};
-use cv_convert::{TryFromCv};
+use cv_convert::{IntoCv, TryFromCv};
 
 
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
@@ -138,19 +138,45 @@ impl EventAdder {
         // Take the exp of L^tilde(t) to get L(t), the final latent image
         event_counter.mul_assign(c);
         event_counter = event_counter.map(|x: f64| x.exp());
-        let event_counter_mat = Mat::try_from_cv(event_counter).unwrap();
+
+        let mut latent_na = OMatrix::<f64, Dynamic, Dynamic>::try_from_cv(&self.latent_image).unwrap();
+        // let min = latent_image.min();
+        let min = 0.0;
+        let max = 1.1;
+        let diff = max-min;
+
+        // The last gathered latent image might get completely black pixels if there are some
+        // negative polarity events right near the end of the exposure time. This looks unreasonably
+        // bad, so I'm fixing it manually here. It's likely due to some DVS pixels firing slightly
+        // sooner than others for the same kind of intensity change.
+        for (latent_px, counter_px) in latent_na.iter_mut().zip(event_counter.iter()) {
+            *latent_px = *latent_px * *counter_px;
 
 
-        
 
-        self
-            .latent_image
-            .clone()
-            .elem_mul(&event_counter_mat)
-            .into_result()
-            .unwrap()
-            .to_mat()
-            .unwrap()
+            if *latent_px > 1.1 {
+                *latent_px = 1.1;
+            } else if *latent_px <= 0.0 {
+                *latent_px = 0.0;
+            }
+            *latent_px = (*latent_px - min) / diff;
+        }
+
+        Mat::try_from_cv(latent_na).unwrap()
+
+        // let event_counter_mat = Mat::try_from_cv(event_counter).unwrap();
+        //
+        //
+        //
+        //
+        // self
+        //     .latent_image
+        //     .clone()
+        //     .elem_mul(&event_counter_mat)
+        //     .into_result()
+        //     .unwrap()
+        //     .to_mat()
+        //     .unwrap()
     }
 
 
@@ -329,11 +355,17 @@ impl EventAdder {
         let blurred_image = &self.blur_info.as_ref().unwrap().blurred_image;
         latent_image = blurred_image.component_div(&latent_image);
 
+        // let min = latent_image.min();
+        let min = 0.0;
+        let max = 1.1;
+        let diff = max-min;
+
         // The last gathered latent image might get completely black pixels if there are some
         // negative polarity events right near the end of the exposure time. This looks unreasonably
         // bad, so I'm fixing it manually here. It's likely due to some DVS pixels firing slightly
         // sooner than others for the same kind of intensity change.
         for (latent_px, blurred_px) in latent_image.iter_mut().zip(blurred_image.iter()) {
+
             if *latent_px > 1.1 {
                 *latent_px = 1.1;
             } else if *latent_px <= 0.0 {
@@ -343,7 +375,10 @@ impl EventAdder {
                     *latent_px = 0.0;
                 }
             }
+            *latent_px = (*latent_px - min) / diff;
         }
+
+        // latent_image.normalize_mut();
 
         // show_display_force("latent", &latent_image, 1, false);
         (Mat::try_from_cv(latent_image).unwrap(), Mat::try_from_cv(edge_image).unwrap())

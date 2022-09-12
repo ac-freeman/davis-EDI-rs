@@ -2,6 +2,8 @@ use crate::reconstructor::{show_display, Reconstructor};
 use clap::Parser;
 use std::error::Error;
 use std::time::Instant;
+use opencv::core::{CV_8U, Mat, MatTraitConst, Vector};
+use opencv::imgcodecs::imwrite;
 
 use serde::Deserialize;
 
@@ -77,8 +79,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                         panic!("No image")
                     }
                 };
-                // let mut mat_8u = Mat::default();
-                // image.convert_to(&mut mat_8u, CV_8U, 255.0, 0.0).unwrap();
+                if frame_count as f64 > args.output_fps * (45.0 / 24.0) {
+                    let mut mat_8u = Mat::default();
+                    image.convert_to(&mut mat_8u, CV_8U, 255.0, 0.0).unwrap();
+                    let name = format!("/home/andrew/Code/Bringing-a-Blurry-Frame-Alive-at-High-Frame-Rate-with-an-Event-Camera/event_cvpr_github/result/rust_edi\
+                /{:010}.png", frame_count);
+                    imwrite(&*name, &mat_8u, &Vector::new()).unwrap();
+                }
 
                 // Don't refresh the window more than 60 Hz
                 if (Instant::now() - last_time).as_millis() > args.output_fps as u128 / 60 {

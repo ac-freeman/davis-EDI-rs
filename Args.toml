@@ -5,4 +5,4 @@ start_c = 0.15344322344322345
 optimize_c = 1
 show_display = 1
 show_blurred_display = 1
-output_fps = 1000
+output_fps = 2400
