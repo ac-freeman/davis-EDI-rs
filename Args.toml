@@ -1,7 +1,7 @@
 args_filename = ""
 base_path = "/media/andrew/ExternalM2/DynamicVision/"
 events_filename = "dvSave-2022_09_09_13_46_22.aedat4"
-start_c = 0.4544322344322345
+start_c = 0.1544322344322345
 optimize_c = 1
 show_display = 1
 show_blurred_display = 1

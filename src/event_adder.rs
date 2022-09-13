@@ -239,7 +239,7 @@ impl EventAdder {
     }
 
     fn get_phi(&self, c: f64, timestamp_start: i64) -> f64 {
-        let (latent_image, mt_image, _) = self.get_latent_and_edge(c, timestamp_start);
+        let (latent_image, mt_image, _) = self.get_latent_and_edge(c, timestamp_start, 0);
         // _show_display_force("mt_image", &mt_image, 1, true);
 
         let (latent_grad, latent_edges) = self.get_gradient_and_edges(latent_image);
@@ -301,15 +301,16 @@ impl EventAdder {
 
 
 
-    fn get_latent_and_edge(&self, c: f64, timestamp_start: i64) -> (Mat, Mat, OMatrix<f64, Dynamic, Dynamic>) {
-        if self.event_during_queues[0].is_empty() {
+    fn get_latent_and_edge(&self, c: f64, timestamp_start: i64, blur_index: usize) -> (Mat, Mat, OMatrix<f64, Dynamic, Dynamic>) {
+        assert!(c > 0.0 && c <= 1.0);
+        if self.event_during_queues[blur_index].is_empty() {
             panic!("No during queue")
         }
         // TODO: Need to avoid having to traverse the whole queue each time?
         let mut start_index = 0;
         loop {
-            if start_index + 1 == self.event_during_queues[0].len()
-                || self.event_during_queues[0][start_index + 1].t() > timestamp_start {
+            if start_index + 1 == self.event_during_queues[blur_index].len()
+                || self.event_during_queues[blur_index][start_index + 1].t() > timestamp_start {
                 break;
             }
             start_index += 1;
@@ -324,7 +325,7 @@ impl EventAdder {
 
         let (mut y, mut x);
         // Events occurring AFTER this timestamp
-        for event in &self.event_during_queues[0][start_index..] {
+        for event in &self.event_during_queues[blur_index][start_index..] {
             y = event.y() as usize;
             x = event.x() as usize;
             latent_image[(y, x)] +=
@@ -348,7 +349,7 @@ impl EventAdder {
         event_counter = event_counter.map(|x: f64| x.exp());
 
         timestamps.mul_assign(-1.0);
-        timestamps.add_scalar_mut(self.event_during_queues[0].last().unwrap().t() as f64);
+        timestamps.add_scalar_mut(self.event_during_queues[blur_index].last().unwrap().t() as f64);
         event_counter.component_mul_assign(&timestamps);
         latent_image.add_assign(&event_counter);
 
@@ -359,7 +360,7 @@ impl EventAdder {
         timestamps.add_scalar_mut(timestamp_start as f64);
         event_counter = DMatrix::<f64>::zeros(self.height as usize, self.width as usize);
 
-        for event in &self.event_during_queues[0][..start_index] {
+        for event in &self.event_during_queues[blur_index][..start_index] {
             y = event.y() as usize;
             x = event.x() as usize;
             latent_image[(y, x)] +=
@@ -381,13 +382,13 @@ impl EventAdder {
         event_counter.mul_assign(c);
         event_counter = event_counter.map(|x: f64| x.exp());
 
-        timestamps.add_scalar_mut(-self.event_during_queues[0][0].t() as f64);
+        timestamps.add_scalar_mut(-self.event_during_queues[blur_index][0].t() as f64);
         event_counter.component_mul_assign(&timestamps);
         latent_image.add_assign(&event_counter);
 
-        latent_image.div_assign( self.event_during_queues[0].last().unwrap().t() as f64
-            - self.event_during_queues[0][0].t() as f64);
-        let blurred_image = &self.blur_infos[0].as_ref().unwrap().blurred_image;
+        latent_image.div_assign( self.event_during_queues[blur_index].last().unwrap().t() as f64
+            - self.event_during_queues[blur_index][0].t() as f64);
+        let blurred_image = &self.blur_infos[blur_index].as_ref().unwrap().blurred_image;
         let a_exp = latent_image.clone_owned();
         latent_image = blurred_image.component_div(&latent_image);
 
@@ -417,10 +418,23 @@ impl EventAdder {
     // L1 = 3L2 - L3 -TB2 - a2 - b2 + b1
     // L1 = L2 - L3 - 2a2 - b2 + b1
     pub(crate) fn get_latent_and_edge_medi(&self, c: f64, timestamp_start_l1: i64, timestamp_start_l2: i64, timestamp_start_l3: i64) -> (Mat) {
-        let (l_2_mat, b2_mat, mut a2) = self.get_latent_and_edge(c, timestamp_start_l2);
+        let (l_2_mat, b2_mat, mut a2) = self.get_latent_and_edge(c, timestamp_start_l2, 1);
+
         let mut l_2: OMatrix<f64, Dynamic, Dynamic> = OMatrix::<f64, Dynamic, Dynamic>::try_from_cv(l_2_mat).unwrap();
         let l2_copy = l_2.clone_owned();
+
         let mut b2: OMatrix<f64, Dynamic, Dynamic> = OMatrix::<f64, Dynamic, Dynamic>::try_from_cv(b2_mat).unwrap();
+        for (px) in b2.iter_mut() {
+            *px = *px * c;
+        }
+
+        let mut B2 = self.blur_infos[1].as_ref().unwrap().blurred_image.clone_owned();
+        for (px) in B2.iter_mut() {
+            if *px == 0.0 {
+                *px = 0.0000000001;
+            }
+            *px = px.ln();
+        }
 
         // need to take the log of a2_exp
         for (px) in a2.iter_mut() {
@@ -430,21 +444,37 @@ impl EventAdder {
             *px = px.ln();
         }
 
-        let (l_3_mat, _, _) = self.get_latent_and_edge(c, timestamp_start_l3);
+
+        let (l_3_mat, _, _) = self.get_latent_and_edge(c, timestamp_start_l3, 2);
+
         let l_3: OMatrix<f64, Dynamic, Dynamic> = OMatrix::<f64, Dynamic, Dynamic>::try_from_cv(l_3_mat).unwrap();
 
-        let (_, b1_mat, _) = self.get_latent_and_edge(c, timestamp_start_l1);
+        let (_, b1_mat, _) = self.get_latent_and_edge(c, timestamp_start_l1, 0);
         let mut b1: OMatrix<f64, Dynamic, Dynamic> = OMatrix::<f64, Dynamic, Dynamic>::try_from_cv(b1_mat).unwrap();
 
+        l_2.add_assign(l2_copy.clone_owned());
         l_2.add_assign(l2_copy);
         l_2.sub_assign(l_3);
+        // l_2.sub_assign(B2);
         l_2.sub_assign(a2.clone_owned());
-        // l_2.sub_assign(a2);
+        l_2.sub_assign(a2);
         l_2.sub_assign(b2);
         l_2.add_assign(b1);
 
 
-        (Mat::try_from_cv(l_2).unwrap())
+        // for (latent_px) in l_2.iter_mut() {
+        //     if *latent_px > 1.1 {
+        //         *latent_px = 1.1;
+        //     } else if *latent_px <= 0.0 {
+        //         *latent_px = 0.0;
+        //     }
+        // }
+
+        let tmp = Mat::try_from_cv(l_2).unwrap();
+        _show_display_force("tmp", &tmp, 1, false);
+        (tmp)
+
+        // (Mat::try_from_cv(l_2).unwrap())
     }
 }
 
@@ -491,7 +521,7 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
                 .par_iter_mut()
                 .for_each(|(timestamp_start, mat)| {
                     // let c = optimize_c()
-                    *mat = event_adder.get_intermediate_image(event_adder.current_c, *timestamp_start);
+                    // *mat = event_adder.get_intermediate_image(event_adder.current_c, *timestamp_start);
                 });
 
             for elem in intermediate_interval_start_timestamps {
@@ -507,7 +537,7 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
         }
 
         // Make a vec of these timestamps so we can iterate them concurrently
-        let mut interval_start_timestamps = vec![(interval_beginning_start, Mat::default(), 0.0)];
+        let mut interval_start_timestamps = vec![(interval_beginning_start, Mat::default(), event_adder.current_c)];
         let mut current_ts = interval_beginning_start + event_adder.interval_t;
         loop {
             if current_ts <= interval_end_start {
@@ -532,51 +562,86 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
                         false => { event_adder.current_c }
                     };
                     *found_c = c;
-                    *mat = event_adder.get_latent_and_edge(c, *timestamp_start).0
+                    *mat = event_adder.get_latent_and_edge(c, *timestamp_start, 0).0
                 });
             }
             MEdi => {
-                for i in 0..interval_start_timestamps.len() {
-                    let found_c = &interval_start_timestamps[i].2;
-                    if i == interval_start_timestamps.len() - 1 {
-                        interval_start_timestamps[i].1 =
-                            event_adder.get_latent_and_edge_medi(
-                                *found_c,
-                                interval_start_timestamps[i].0,
-                                interval_start_timestamps[i].0,
-                                interval_start_timestamps[i].0,
-                            )
-                    }
-                    else if i == interval_start_timestamps.len() - 2 {
-                        interval_start_timestamps[i].1 =
-                            event_adder.get_latent_and_edge_medi(
-                                *found_c,
-                                interval_start_timestamps[i].0,
-                                interval_start_timestamps[i+1].0,
-                                interval_start_timestamps[i+1].0,
-                            )
-                    }
-                    else {
-                        interval_start_timestamps[i].1 =
-                            event_adder.get_latent_and_edge_medi(
-                                *found_c,
-                                interval_start_timestamps[i].0,
-                                interval_start_timestamps[i+1].0,
-                                interval_start_timestamps[i+2].0,
-                            )
+                let interval_1_beginning_start =
+                    ((blur_info.exposure_begin_t) / event_adder.interval_t) * event_adder.interval_t;
+                let interval_1_end_start =
+                    ((blur_info.exposure_end_t) / event_adder.interval_t) * event_adder.interval_t;
+                if interval_1_beginning_start >= event_adder.blur_infos[1].as_ref().unwrap().exposure_end_t {
+                    panic!("Bad interval")
+                }
+                let mut interval_start_timestamps_1 = vec![(interval_1_beginning_start, Mat::default(), 0.0)];
+                let mut current_ts = interval_1_beginning_start + event_adder.interval_t;
+                loop {
+                    if current_ts <= interval_1_end_start {
+                        interval_start_timestamps_1.push((current_ts, Mat::default(), event_adder.current_c));
+                        current_ts += event_adder.interval_t;
+                    } else {
+                        break;
                     }
                 }
 
-                // interval_start_timestamps
-                //     .iter_mut()
-                //     .for_each(|(timestamp_start, mat, found_c)| {
-                //         // let c = match event_adder.optimize_c {
-                //         //     true => { event_adder.optimize_c(*timestamp_start) },
-                //         //     false => { event_adder.current_c }
-                //         // };
-                //         // *found_c = c;
-                //         *mat = event_adder.get_latent_and_edge_medi(*found_c, *timestamp_start).0
-                //     });
+                let interval_2_beginning_start =
+                    ((blur_info.exposure_begin_t) / event_adder.interval_t) * event_adder.interval_t;
+                let interval_2_end_start =
+                    ((blur_info.exposure_end_t) / event_adder.interval_t) * event_adder.interval_t;
+                if interval_2_beginning_start >= event_adder.blur_infos[2].as_ref().unwrap().exposure_end_t {
+                    panic!("Bad interval")
+                }
+                let mut interval_start_timestamps_2 = vec![(interval_2_beginning_start, Mat::default(), 0.0)];
+                let mut current_ts = interval_2_beginning_start + event_adder.interval_t;
+                loop {
+                    if current_ts <= interval_2_end_start {
+                        interval_start_timestamps_2.push((current_ts, Mat::default(), event_adder.current_c));
+                        current_ts += event_adder.interval_t;
+                    } else {
+                        break;
+                    }
+                }
+
+                let found_c = &interval_start_timestamps[0].2;
+                let idx = interval_start_timestamps.len()/2;
+                interval_start_timestamps[idx].1 =
+                            event_adder.get_latent_and_edge_medi(
+                                *found_c,
+                                interval_start_timestamps[idx].0,
+                                interval_start_timestamps_1[interval_start_timestamps_1.len()/2].0,
+                                interval_start_timestamps_2[interval_start_timestamps_2.len()/2].0,
+                            )
+
+                // for i in 0..interval_start_timestamps.len() {
+                //     let found_c = &interval_start_timestamps[i].2;
+                //     if i == interval_start_timestamps.len() - 1 {
+                //         interval_start_timestamps[i].1 =
+                //             event_adder.get_latent_and_edge_medi(
+                //                 *found_c,
+                //                 interval_start_timestamps[i].0,
+                //                 interval_start_timestamps[i].0,
+                //                 interval_start_timestamps[i].0,
+                //             )
+                //     }
+                //     else if i == interval_start_timestamps.len() - 2 {
+                //         interval_start_timestamps[i].1 =
+                //             event_adder.get_latent_and_edge_medi(
+                //                 *found_c,
+                //                 interval_start_timestamps[i].0,
+                //                 interval_start_timestamps[i+1].0,
+                //                 interval_start_timestamps[i+1].0,
+                //             )
+                //     }
+                //     else {
+                //         interval_start_timestamps[i].1 =
+                //             event_adder.get_latent_and_edge_medi(
+                //                 *found_c,
+                //                 interval_start_timestamps[i].0,
+                //                 interval_start_timestamps[i+1].0,
+                //                 interval_start_timestamps[i+2].0,
+                //             )
+                //     }
+                // }
             }
         }
 
@@ -610,6 +675,7 @@ fn event_polarity_float(event: &Event) -> f64 {
 
 use opencv::imgproc::{sobel, THRESH_BINARY, threshold};
 use crate::event_adder::Mode::{Edi, MEdi};
+use crate::reconstructor::_show_display_force;
 
 
 pub struct BlurInfo {

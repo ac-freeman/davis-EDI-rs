@@ -91,7 +91,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     last_time = Instant::now();
                     // Iterate through images by pressing a key on keyboard. To iterate automatically,
                     // change `wait` to 1
-                    show_display("RETURNED", &image, 1, &reconstructor);
+                    // show_display("RETURNED", &image, 1, &reconstructor);
                 }
             }
         }
