@@ -397,15 +397,15 @@ impl EventAdder {
         // bad, so I'm fixing it manually here. It's likely due to some DVS pixels firing slightly
         // sooner than others for the same kind of intensity change.
         for (latent_px, blurred_px) in latent_image.iter_mut().zip(blurred_image.iter()) {
-            if *latent_px > 1.1 {
-                *latent_px = 1.1;
-            } else if *latent_px <= 0.0 {
-                if *blurred_px == 1.0 {
-                    *latent_px = 1.0;
-                } else {
-                    *latent_px = 0.0;
-                }
-            }
+            // if *latent_px > 1.1 {
+            //     *latent_px = 1.0;
+            // } else if *latent_px <= 0.0 {
+            //     if *blurred_px == 1.0 {
+            //         *latent_px = 1.0;
+            //     } else {
+            //         *latent_px = 0.0;
+            //     }
+            // }
         }
 
         // show_display_force("latent", &latent_image, 1, false);
@@ -413,35 +413,103 @@ impl EventAdder {
 
     }
 
+    fn get_bi(&self, c: f64, blur_index: usize, timestamp_start_1: i64, timestamp_start_2: i64) -> OMatrix<f64, Dynamic, Dynamic> {
+        let mut bi = DMatrix::<f64>::zeros(self.height as usize, self.width as usize);
+
+        let mut start_index = 0;
+        loop {
+            if start_index + 1 == self.event_during_queues[blur_index].len()
+                || self.event_during_queues[blur_index][start_index + 1].t() > timestamp_start_1 {
+                break;
+            }
+            start_index += 1;
+        }
+
+        let mut end_index = 0;
+        loop {
+            if end_index + 1 == self.event_during_queues[blur_index+1].len()
+                || self.event_during_queues[blur_index + 1][end_index + 1].t() > timestamp_start_2 {
+                break;
+            }
+            end_index += 1;
+        }
+
+
+        let (mut y, mut x);
+
+        // Events occurring during the blurred image
+        for event in &self.event_during_queues[blur_index][start_index..] {
+            y = event.y() as usize;
+            x = event.x() as usize;
+            bi[(y, x)] += event_polarity_float(event);
+        }
+
+        // Events occurring between the blurred image and the next blurred image
+        for event in &self.event_before_queues[blur_index + 1][0..] {
+            y = event.y() as usize;
+            x = event.x() as usize;
+            bi[(y, x)] += event_polarity_float(event);
+        }
+
+        // Events occurring during the first part of the next blurred image
+        for event in &self.event_during_queues[blur_index + 1][0..end_index] {
+            y = event.y() as usize;
+            x = event.x() as usize;
+            bi[(y, x)] += event_polarity_float(event);
+        }
+
+        for (px) in bi.iter_mut() {
+            *px = *px * c;
+        }
+
+        bi
+    }
+
     // Simplify math?
     // orig:
     // L1 = 3L2 - L3 -TB2 - a2 - b2 + b1
     // L1 = L2 - L3 - 2a2 - b2 + b1
+    //
+    // b_i should be ALL the events occurring between the start of latent image L_i and the start of
+    // latent image L_i+1
     pub(crate) fn get_latent_and_edge_medi(&self, c: f64, timestamp_start_l1: i64, timestamp_start_l2: i64, timestamp_start_l3: i64) -> (Mat) {
         let (l_2_mat, b2_mat, mut a2) = self.get_latent_and_edge(c, timestamp_start_l2, 1);
 
         let mut l_2: OMatrix<f64, Dynamic, Dynamic> = OMatrix::<f64, Dynamic, Dynamic>::try_from_cv(l_2_mat).unwrap();
         let l2_copy = l_2.clone_owned();
+        let mut l2_ln = l_2.clone_owned();
 
-        let mut b2: OMatrix<f64, Dynamic, Dynamic> = OMatrix::<f64, Dynamic, Dynamic>::try_from_cv(b2_mat).unwrap();
-        for (px) in b2.iter_mut() {
-            *px = *px * c;
-        }
+        // let mut b2: OMatrix<f64, Dynamic, Dynamic> = OMatrix::<f64, Dynamic, Dynamic>::try_from_cv(b2_mat).unwrap();
+        // for (px) in b2.iter_mut() {
+        //     *px = *px * c;
+        // }
+        let b2 = self.get_bi(c, 1, timestamp_start_l2, timestamp_start_l3);
 
         let mut B2 = self.blur_infos[1].as_ref().unwrap().blurred_image.clone_owned();
         for (px) in B2.iter_mut() {
             if *px == 0.0 {
-                *px = 0.0000000001;
+                *px = 0.0001;
             }
-            *px = px.ln();
+            *px = (255.0 * *px).ln() / 255.0;
+            let tmp = *px;
+            print!("");
+        }
+
+        for (px) in l2_ln.iter_mut() {
+            if *px == 0.0 {
+                *px = 0.000001;
+            }
+            *px = (255.0 * *px).ln() / 255.0;
+            let tmp = *px;
+            print!("");
         }
 
         // need to take the log of a2_exp
         for (px) in a2.iter_mut() {
             if *px == 0.0 {
-                *px = 0.0000000001;
+                *px = 0.0001;
             }
-            *px = px.ln();
+            *px = (255.0 * *px).ln() / 255.0;
         }
 
 
@@ -449,26 +517,36 @@ impl EventAdder {
 
         let l_3: OMatrix<f64, Dynamic, Dynamic> = OMatrix::<f64, Dynamic, Dynamic>::try_from_cv(l_3_mat).unwrap();
 
-        let (_, b1_mat, _) = self.get_latent_and_edge(c, timestamp_start_l1, 0);
-        let mut b1: OMatrix<f64, Dynamic, Dynamic> = OMatrix::<f64, Dynamic, Dynamic>::try_from_cv(b1_mat).unwrap();
+
+        let b1 = self.get_bi(c, 0, timestamp_start_l1, timestamp_start_l2);
+        // let (_, b1_mat, _) = self.get_latent_and_edge(c, timestamp_start_l1, 0);
+        // let mut b1: OMatrix<f64, Dynamic, Dynamic> = OMatrix::<f64, Dynamic, Dynamic>::try_from_cv(b1_mat).unwrap();
+        // for (px) in b1.iter_mut() {
+        //     *px = *px * c;
+        // }
 
         l_2.add_assign(l2_copy.clone_owned());
-        l_2.add_assign(l2_copy);
-        l_2.sub_assign(l_3);
-        // l_2.sub_assign(B2);
-        l_2.sub_assign(a2.clone_owned());
+        // l_2.add_assign(l2_copy);
+        l_2.sub_assign(l_3.clone_owned());
+        // l_2.sub_assign(l_3);
+        l_2.sub_assign(B2);
+        // l_2.sub_assign(l2_ln);
+        // l_2.sub_assign(a2.clone_owned());
         l_2.sub_assign(a2);
         l_2.sub_assign(b2);
         l_2.add_assign(b1);
 
-
-        // for (latent_px) in l_2.iter_mut() {
-        //     if *latent_px > 1.1 {
-        //         *latent_px = 1.1;
-        //     } else if *latent_px <= 0.0 {
-        //         *latent_px = 0.0;
-        //     }
-        // }
+        for (latent_px, blurred_px) in l_2.iter_mut().zip(self.blur_infos[0].as_ref().unwrap().blurred_image.iter()) {
+            if *latent_px > 1.1 {
+                *latent_px = 1.0;
+            } else if *latent_px <= 0.0 {
+                // if *blurred_px == 1.0 {
+                //     *latent_px = 1.0;
+                // } else {
+                    *latent_px = 0.0;
+                // }
+            }
+        }
 
         let tmp = Mat::try_from_cv(l_2).unwrap();
         _show_display_force("tmp", &tmp, 1, false);
@@ -611,6 +689,13 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
                                 interval_start_timestamps_1[interval_start_timestamps_1.len()/2].0,
                                 interval_start_timestamps_2[interval_start_timestamps_2.len()/2].0,
                             )
+                // interval_start_timestamps[0].1 =
+                //     event_adder.get_latent_and_edge_medi(
+                //         *found_c,
+                //         interval_start_timestamps[0].0,
+                //         interval_start_timestamps_1[0].0,
+                //         interval_start_timestamps_2[0].0,
+                //     )
 
                 // for i in 0..interval_start_timestamps.len() {
                 //     let found_c = &interval_start_timestamps[i].2;
