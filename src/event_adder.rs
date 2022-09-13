@@ -1,5 +1,5 @@
 use std::mem;
-use std::ops::{AddAssign, DivAssign, MulAssign, SubAssign};
+use std::ops::{AddAssign, DivAssign, MulAssign, Sub, SubAssign};
 use nalgebra::{DMatrix, Dynamic, OMatrix};
 use aedat::base::Packet;
 use aedat::events_generated::Event;
@@ -483,7 +483,7 @@ impl EventAdder {
         // for (px) in b2.iter_mut() {
         //     *px = *px * c;
         // }
-        let b2 = self.get_bi(c, 1, timestamp_start_l2, timestamp_start_l3);
+        // let b2 = self.get_bi(c, 1, timestamp_start_l2, timestamp_start_l3);
 
         let mut B2 = self.blur_infos[1].as_ref().unwrap().blurred_image.clone_owned();
         for (px) in B2.iter_mut() {
@@ -516,23 +516,63 @@ impl EventAdder {
         let (l_3_mat, _, _) = self.get_latent_and_edge(c, timestamp_start_l3, 2);
 
         let l_3: OMatrix<f64, Dynamic, Dynamic> = OMatrix::<f64, Dynamic, Dynamic>::try_from_cv(l_3_mat).unwrap();
+        let tmp = Mat::try_from_cv(l_3.clone()).unwrap();
+        _show_display_force("l_3", &tmp, 1, false);
 
 
-        let b1 = self.get_bi(c, 0, timestamp_start_l1, timestamp_start_l2);
-        // let (_, b1_mat, _) = self.get_latent_and_edge(c, timestamp_start_l1, 0);
+        // let b1 = self.get_bi(c, 0, timestamp_start_l1, timestamp_start_l2);
+
+        let mut l3_ln = l_3.clone_owned();
+        for (px) in l3_ln.iter_mut() {
+            if *px == 0.0 {
+                *px = 0.000001;
+            }
+            *px = (255.0 * *px).ln() / 255.0;
+            let tmp = *px;
+            print!("");
+        }
+
+        let b2 = l3_ln -l2_ln.clone_owned();
+
+
+
+
+
+
+
+
+
+        let (l1_mat, b1_mat, _) = self.get_latent_and_edge(c, timestamp_start_l1, 0);
+        let mut l_1: OMatrix<f64, Dynamic, Dynamic> = OMatrix::<f64, Dynamic, Dynamic>::try_from_cv(l1_mat).unwrap();
+
+        let mut l1_ln = l_1.clone_owned();
+
+        for (px) in l1_ln.iter_mut() {
+            if *px == 0.0 {
+                *px = 0.000001;
+            }
+            *px = (255.0 * *px).ln() / 255.0;
+            let tmp = *px;
+            print!("");
+        }
+
+        let b1 = l2_ln -l1_ln;
         // let mut b1: OMatrix<f64, Dynamic, Dynamic> = OMatrix::<f64, Dynamic, Dynamic>::try_from_cv(b1_mat).unwrap();
         // for (px) in b1.iter_mut() {
         //     *px = *px * c;
         // }
 
         l_2.add_assign(l2_copy.clone_owned());
-        // l_2.add_assign(l2_copy);
-        l_2.sub_assign(l_3.clone_owned());
-        // l_2.sub_assign(l_3);
+        l_2.add_assign(l2_copy);
+        // l_2.sub_assign(l_3.clone_owned());
+        l_2.sub_assign(l_3);
         l_2.sub_assign(B2);
+
         // l_2.sub_assign(l2_ln);
         // l_2.sub_assign(a2.clone_owned());
         l_2.sub_assign(a2);
+        let tmp = Mat::try_from_cv(l_2.clone()).unwrap();
+        _show_display_force("l_2_mid", &tmp, 1, true);
         l_2.sub_assign(b2);
         l_2.add_assign(b1);
 
