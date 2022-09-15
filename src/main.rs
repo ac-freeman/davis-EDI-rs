@@ -1,4 +1,4 @@
-use crate::reconstructor::{show_display, Reconstructor, Reconstructors, ReconstructionError};
+// use crate::reconstructor::{show_display, Reconstructor, Reconstructors, ReconstructionError};
 use clap::Parser;
 use std::error::Error;
 use std::fs::File;
@@ -6,11 +6,11 @@ use std::os::unix::net::UnixStream;
 use std::time::Instant;
 
 use serde::Deserialize;
-use aedat::base::Source;
 use opencv::core::Mat;
 
 mod event_adder;
 mod reconstructor;
+mod reconstructor2;
 
 #[derive(Parser, Debug, Deserialize, Default)]
 pub struct Args {
@@ -59,29 +59,29 @@ fn main() -> Result<(), Box<dyn Error>> {
         let content = std::fs::read_to_string(args.args_filename)?;
         args = toml::from_str(&content).unwrap();
     }
-    let mut reconstructor= match args.mode.as_str() {
-        "file" => Box::new(Reconstructor::<File>::new(args.base_path,
-                      args.events_filename,
-                      args.start_c,
-                      args.optimize_c != 0,
-                      args.show_display != 0,
-                      args.show_blurred_display != 0,
-                      args.output_fps,
-                  )) as Box<dyn Reconstructors<Item = Result<Mat, ReconstructionError>>>,
-        "socket" => Box::new(Reconstructor::<UnixStream>::new(args.base_path,
-                                                      args.events_filename,
-                                                      args.start_c,
-                                                      args.optimize_c != 0,
-                                                      args.show_display != 0,
-                                                      args.show_blurred_display != 0,
-                                                      args.output_fps,
-        )) as Box<dyn Reconstructors<Item = Result<Mat, ReconstructionError>>>,
-
-        _ => {
-            panic!("Invalid input format")
-        }
-    };
-
+    // let mut reconstructor= match args.mode.as_str() {
+    //     "file" => Box::new(Reconstructor::<File>::new(args.base_path,
+    //                   args.events_filename,
+    //                   args.start_c,
+    //                   args.optimize_c != 0,
+    //                   args.show_display != 0,
+    //                   args.show_blurred_display != 0,
+    //                   args.output_fps,
+    //               )) as Box<dyn Reconstructors<Item = Result<Mat, ReconstructionError>>>,
+    //     "socket" => Box::new(Reconstructor::<UnixStream>::new(args.base_path,
+    //                                                   args.events_filename,
+    //                                                   args.start_c,
+    //                                                   args.optimize_c != 0,
+    //                                                   args.show_display != 0,
+    //                                                   args.show_blurred_display != 0,
+    //                                                   args.output_fps,
+    //     )) as Box<dyn Reconstructors<Item = Result<Mat, ReconstructionError>>>,
+    //
+    //     _ => {
+    //         panic!("Invalid input format")
+    //     }
+    // };
+    // let tmp = reconstructor::Reconstructor();
 
     // let mut reconstructor = Reconstructor::<File>::new(
     //     args.base_path,
@@ -96,31 +96,31 @@ fn main() -> Result<(), Box<dyn Error>> {
     let first_time = last_time;
     let mut frame_count = 0;
     loop {
-        match reconstructor.next() {
-            None => {
-                println!("\nFinished!");
-                break;
-            }
-            Some(image) => {
-                frame_count += 1;
-                let image = match image {
-                    Ok(a) => a,
-                    Err(_) => {
-                        panic!("No image")
-                    }
-                };
-                // let mut mat_8u = Mat::default();
-                // image.convert_to(&mut mat_8u, CV_8U, 255.0, 0.0).unwrap();
-
-                // Don't refresh the window more than 60 Hz
-                if (Instant::now() - last_time).as_millis() > args.output_fps as u128 / 60 {
-                    last_time = Instant::now();
-                    // Iterate through images by pressing a key on keyboard. To iterate automatically,
-                    // change `wait` to 1
-                    // show_display("RETURNED", &image, 1, &reconstructor);
-                }
-            }
-        }
+        // match reconstructor.next() {
+        //     None => {
+        //         println!("\nFinished!");
+        //         break;
+        //     }
+        //     Some(image) => {
+        //         frame_count += 1;
+        //         let image = match image {
+        //             Ok(a) => a,
+        //             Err(_) => {
+        //                 panic!("No image")
+        //             }
+        //         };
+        //         // let mut mat_8u = Mat::default();
+        //         // image.convert_to(&mut mat_8u, CV_8U, 255.0, 0.0).unwrap();
+        //
+        //         // Don't refresh the window more than 60 Hz
+        //         if (Instant::now() - last_time).as_millis() > args.output_fps as u128 / 60 {
+        //             last_time = Instant::now();
+        //             // Iterate through images by pressing a key on keyboard. To iterate automatically,
+        //             // change `wait` to 1
+        //             show_display("RETURNED", &image, 1, **reconstructor);
+        //         }
+        //     }
+        // }
     }
     println!("Reconstructed {} frames in {} seconds, at an average {} FPS",
              frame_count,
