@@ -266,13 +266,17 @@ fn fill_packet_queue_to_frame(
                         }
                     }
 
+                    // TODO: TMP
+                    let tmp_blurred_mat = Mat::try_from_cv(&image).unwrap();
+                    _show_display_force("blurred input", &tmp_blurred_mat, 1, false);
+
                     let blur_info = BlurInfo::new(
                         image,
                         frame.exposure_begin_t(),
                         frame.exposure_end_t(),
                     );
 
-                    return Ok(blur_info);
+                    // return Ok(blur_info);
                 } else if p.stream_id == aedat::base::StreamContent::Events as u32 {
                     packet_queue.push_back(p);
                 }
