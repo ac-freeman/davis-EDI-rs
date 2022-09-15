@@ -1,10 +1,13 @@
-use crate::reconstructor::{show_display, Reconstructor};
+use crate::reconstructor::{show_display, Reconstructor, Reconstructors, ReconstructionError};
 use clap::Parser;
 use std::error::Error;
 use std::fs::File;
+use std::os::unix::net::UnixStream;
 use std::time::Instant;
 
 use serde::Deserialize;
+use aedat::base::Source;
+use opencv::core::Mat;
 
 mod event_adder;
 mod reconstructor;
@@ -14,6 +17,10 @@ pub struct Args {
     /// Filename for args (optional; must be in .toml format)
     #[clap(short, long, default_value = "")]
     pub(crate) args_filename: String,
+
+    /// Input mode. Valid options are "file", "socket", and "tcp"
+    #[clap(short, long, default_value = "file")]
+    pub(crate) mode: String,
 
     /// Directory containing the input aedat4 file
     #[clap(short, long, default_value = "")]
@@ -52,15 +59,39 @@ fn main() -> Result<(), Box<dyn Error>> {
         let content = std::fs::read_to_string(args.args_filename)?;
         args = toml::from_str(&content).unwrap();
     }
-    let mut reconstructor = Reconstructor::<File>::new(
-        args.base_path,
-        args.events_filename,
-        args.start_c,
-        args.optimize_c != 0,
-        args.show_display != 0,
-        args.show_blurred_display != 0,
-        args.output_fps,
-    );
+    let mut reconstructor= match args.mode.as_str() {
+        "file" => Box::new(Reconstructor::<File>::new(args.base_path,
+                      args.events_filename,
+                      args.start_c,
+                      args.optimize_c != 0,
+                      args.show_display != 0,
+                      args.show_blurred_display != 0,
+                      args.output_fps,
+                  )) as Box<dyn Reconstructors<Item = Result<Mat, ReconstructionError>>>,
+        "socket" => Box::new(Reconstructor::<UnixStream>::new(args.base_path,
+                                                      args.events_filename,
+                                                      args.start_c,
+                                                      args.optimize_c != 0,
+                                                      args.show_display != 0,
+                                                      args.show_blurred_display != 0,
+                                                      args.output_fps,
+        )) as Box<dyn Reconstructors<Item = Result<Mat, ReconstructionError>>>,
+
+        _ => {
+            panic!("Invalid input format")
+        }
+    };
+
+
+    // let mut reconstructor = Reconstructor::<File>::new(
+    //     args.base_path,
+    //     args.events_filename,
+    //     args.start_c,
+    //     args.optimize_c != 0,
+    //     args.show_display != 0,
+    //     args.show_blurred_display != 0,
+    //     args.output_fps,
+    // );
     let mut last_time = Instant::now();
     let first_time = last_time;
     let mut frame_count = 0;
@@ -86,7 +117,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     last_time = Instant::now();
                     // Iterate through images by pressing a key on keyboard. To iterate automatically,
                     // change `wait` to 1
-                    show_display("RETURNED", &image, 1, &reconstructor);
+                    // show_display("RETURNED", &image, 1, &reconstructor);
                 }
             }
         }

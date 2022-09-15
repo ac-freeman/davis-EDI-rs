@@ -42,6 +42,11 @@ pub struct Reconstructor<T: Source> {
     latent_image_queue: VecDeque<Mat>,
 }
 
+pub trait Reconstructors: Iterator {}
+//
+impl Reconstructors for Reconstructor<File> {}
+impl Reconstructors for Reconstructor<UnixStream> {}
+
 impl Reconstructor<File> {
     pub fn new(
         directory: String,
