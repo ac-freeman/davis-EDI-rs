@@ -1,5 +1,7 @@
 use crate::event_adder::{BlurInfo, deblur_image, EventAdder};
-use aedat::base::{Packet, ParseError, Source, Stream};
+use aedat::base::{Packet, ParseError, Source, Stream, StreamContent};
+use aedat::base::ioheader_generated::Compression;
+
 use opencv::core::{
     Mat, MatTrait, MatTraitConst, Size, CV_8S,
     NORM_MINMAX,
@@ -126,7 +128,13 @@ impl Reconstructor<UnixStream> {
         // https://gitlab.com/inivation/dv/dv-python/-/tree/master/
 
         let mut aedat_decoder =
-            aedat::base::Decoder::<UnixStream>::new(Path::new(&(directory + "/" + &aedat_filename))).unwrap();
+            aedat::base::Decoder::<UnixStream>::new(
+                Path::new(&(directory + "/" + &aedat_filename)),
+                StreamContent::Frame,
+                Compression::None,
+            346,
+            260
+            ).unwrap();
         let height = 260;
         let width = 346;
         let mut event_counter = Mat::default();
