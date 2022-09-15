@@ -8,13 +8,16 @@ use opencv::highgui;
 use opencv::imgproc::resize;
 use std::collections::VecDeque;
 use std::{io, mem};
-use std::io::Write;
+use std::io::{BufRead, Cursor, Read, Write};
+use std::os::unix::net::UnixStream;
 use std::path::Path;
-use std::time::Instant;
+use std::thread::sleep;
+use std::time::{Duration, Instant};
 use simple_error::SimpleError;
 use crossbeam_utils::thread;
 use nalgebra::DMatrix;
 use cv_convert::TryFromCv;
+use byteorder::{LittleEndian, ReadBytesExt};
 
 #[derive(Default)]
 pub struct BlurredInput {
@@ -46,10 +49,66 @@ impl Reconstructor {
         blurred_display: bool,
         output_fps: f64,
     ) -> Reconstructor {
+        // https://gitlab.com/inivation/dv/dv-python/-/tree/master/
+        // let socket = Path::new("/tmp/dv-runtime2.sock");
+        //
+        // let mut stream = match UnixStream::connect(&socket) {
+        //     Err(_) => panic!("server is not running"),
+        //     Ok(stream) => stream
+        // };
+        // // Connect to socket
+        // // let mut reader = io::BufReader::new(&mut stream);
+        //
+        // // let received: Vec<u8> = reader.fill_buf().unwrap().to_vec();
+        // let mut bytes = [0; 4];
+        // stream.read_exact(&mut bytes).unwrap();
+        // let id = u32::from_le_bytes(bytes);
+        //
+        // let mut bytes = [0; 4];
+        // stream.read_exact(&mut bytes).unwrap();
+        // let length = u32::from_le_bytes(bytes);
+        //
+        // let mut raw_buffer = std::vec![0; length as usize];
+        // stream.read_exact(&mut raw_buffer).unwrap();
+
+
+        // let mut io_header = [0_u8; 8];
+        // stream.read_exact(&mut io_header).unwrap();
+        // let io_header = &io_header[4..8];
+        // let length = u32::from_le_bytes(*io_header);
+        // let mut cursor = Cursor::new(io_header);
+        // let length = cursor.read_u32::<LittleEndian>().unwrap() as usize;
+        // assert_eq!(length % 4, 0);
+        //
+        // let mut packet = vec![0_u8; length];
+        // stream.read_exact(&mut packet).unwrap();
+        // let id = &packet[0..4];
+        // let packet_data = &packet[4..];
+        // for letter in id {
+        //     println!("{}", letter.to_string());
+        // }
+
+        // reader.consume(8);
+        // let received: Vec<u8> = loop {
+        //     let tmp = reader.fill_buf().unwrap().to_vec();
+        //     if tmp.len() < length {
+        //         sleep(Duration::from_millis(100));
+        //     } else {
+        //         break tmp
+        //     }
+        // };
+        // let packet = &received[4..length];
+        // reader.consume(length);
+        // let mut buf = [0; 128];
+        // stream.read(&mut buf).unwrap();
+
+        let tmp = Path::new(&(directory.clone() + "/" + &aedat_filename));
+
         let mut aedat_decoder =
             aedat::base::Decoder::new(Path::new(&(directory + "/" + &aedat_filename))).unwrap();
-        let (height, width) = split_camera_info(&aedat_decoder.id_to_stream[&0]);
-
+        // let (height, width) = split_camera_info(&aedat_decoder.id_to_stream[&0]);
+        let height = 260;
+        let width = 346;
         let mut event_counter = Mat::default();
 
         // Signed integers, to allow for negative polarities dominating the interval
@@ -65,6 +124,26 @@ impl Reconstructor {
         // Get the first frame and ignore events before it
         loop {
             if let Ok(p) = aedat_decoder.next().unwrap() {
+                // TODO: TEMPORARY, for testing
+                if p.stream_id == aedat::base::StreamContent::Events as u32 {
+                    let event_packet =
+                        match aedat::events_generated::size_prefixed_root_as_event_packet(&p.buffer) {
+                            Ok(result) => result,
+                            Err(_) => {
+                                panic!("the packet does not have a size prefix");
+                            }
+                        };
+
+                    let event_arr = match event_packet.elements() {
+                        None => panic!("no events"),
+                        Some(events) => events,
+                    };
+
+                    for event in event_arr {
+                        assert!(event.x()<346);
+                        assert!(event.y()<260);
+                    }
+                }
                 if p.stream_id == aedat::base::StreamContent::Frame as u32 {
                     match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer)
                     {
