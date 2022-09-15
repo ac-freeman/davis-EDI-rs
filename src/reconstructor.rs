@@ -72,7 +72,7 @@ impl Reconstructor<File> {
         // Get the first frame and ignore events before it
         loop {
             if let Ok(p) = aedat_decoder.next().unwrap() {
-                if p.stream_id == aedat::base::StreamContent::Frame as u32 {
+                if matches!(aedat_decoder.id_to_stream.get(&p.stream_id).unwrap().content, aedat::base::StreamContent::Frame) {
                     match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer)
                     {
                         Ok(result) => result,
@@ -153,7 +153,7 @@ impl Reconstructor<UnixStream> {
         loop {
             if let Ok(p) = aedat_decoder.next().unwrap() {
                 // TODO: TEMPORARY, for testing
-                if p.stream_id == aedat::base::StreamContent::Events as u32 {
+                if matches!(aedat_decoder.id_to_stream.get(&p.stream_id).unwrap().content, aedat::base::StreamContent::Events) {
                     let event_packet =
                         match aedat::events_generated::size_prefixed_root_as_event_packet(&p.buffer) {
                             Ok(result) => result,
@@ -172,7 +172,7 @@ impl Reconstructor<UnixStream> {
                         assert!(event.y()<260);
                     }
                 }
-                if p.stream_id == aedat::base::StreamContent::Frame as u32 {
+                if matches!(aedat_decoder.id_to_stream.get(&p.stream_id).unwrap().content, aedat::base::StreamContent::Frame) {
                     match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer)
                     {
                         Ok(result) => result,
@@ -232,9 +232,9 @@ impl <T: Source + std::io::Read> Reconstructor<T> {
     fn get_more_images(&mut self) -> Result<(), SimpleError>{
 
         while let Some(p) = self.packet_queue.pop_front() {
-            match p.stream_id {
-                    a if a == aedat::base::StreamContent::Frame as u32 => {}
-                    a if a == aedat::base::StreamContent::Events as u32 => {
+            match self.aedat_decoder.id_to_stream.get(&p.stream_id).unwrap().content {
+                    aedat::base::StreamContent::Frame => {}
+                    aedat::base::StreamContent::Events => {
                         self.event_adder.sort_events(p);
                     }
                     _ => {
