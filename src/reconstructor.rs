@@ -1,5 +1,5 @@
 use crate::event_adder::{BlurInfo, deblur_image, EventAdder};
-use aedat::base::{Packet, ParseError, Stream};
+use aedat::base::{Packet, ParseError, Source, Stream};
 use opencv::core::{
     Mat, MatTrait, MatTraitConst, Size, CV_8S,
     NORM_MINMAX,
@@ -8,6 +8,7 @@ use opencv::highgui;
 use opencv::imgproc::resize;
 use std::collections::VecDeque;
 use std::{io, mem};
+use std::fs::File;
 use std::io::{BufRead, Cursor, Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
@@ -25,13 +26,13 @@ pub struct BlurredInput {
     pub exposure_begin_t: i64,
     pub exposure_end_t: i64,
 }
-unsafe impl Sync for Reconstructor {}
-unsafe impl Send for Reconstructor {}
+unsafe impl <T: Source> Sync for Reconstructor<T>  {}
+unsafe impl <T: Source> Send for Reconstructor<T>  {}
 
-pub struct Reconstructor {
+pub struct Reconstructor<T: Source> {
     show_display: bool,
     show_blurred_display: bool,
-    aedat_decoder: aedat::base::Decoder,
+    aedat_decoder: aedat::base::Decoder<T>,
     height: usize,
     width: usize,
     packet_queue: VecDeque<Packet>,
@@ -39,7 +40,7 @@ pub struct Reconstructor {
     latent_image_queue: VecDeque<Mat>,
 }
 
-impl Reconstructor {
+impl Reconstructor<File> {
     pub fn new(
         directory: String,
         aedat_filename: String,
@@ -48,65 +49,84 @@ impl Reconstructor {
         display: bool,
         blurred_display: bool,
         output_fps: f64,
-    ) -> Reconstructor {
+    ) -> Reconstructor<File>
+    {
+        let mut aedat_decoder =
+            aedat::base::Decoder::<File>::new(Path::new(&(directory + "/" + &aedat_filename))).unwrap();
+        let (height, width) = split_camera_info(&aedat_decoder.id_to_stream[&0]);
+
+        let mut event_counter = Mat::default();
+
+        // Signed integers, to allow for negative polarities dominating the interval
+        unsafe {
+            event_counter
+                .create_rows_cols(height as i32, width as i32, CV_8S)
+                .unwrap();
+        }
+
+        let packet_queue = VecDeque::new();
+        let output_frame_length = (1000000.0 / output_fps) as i64;
+
+        // Get the first frame and ignore events before it
+        loop {
+            if let Ok(p) = aedat_decoder.next().unwrap() {
+                if p.stream_id == aedat::base::StreamContent::Frame as u32 {
+                    match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer)
+                    {
+                        Ok(result) => result,
+                        Err(_) => {
+                            panic!("the packet does not have a size prefix");
+                        }
+                    };
+                    break;
+                }
+            }
+        }
+
+        let mut r = Reconstructor {
+            show_display: display,
+            show_blurred_display: blurred_display,
+            aedat_decoder,
+            height: height as usize,
+            width: width as usize,
+            packet_queue,
+            event_adder: EventAdder::new(
+                height as usize,
+                width as usize,
+                output_frame_length,
+                start_c,
+                optimize_c,
+            ),
+            latent_image_queue: VecDeque::new(),
+        };
+        let blur_info = fill_packet_queue_to_frame(
+            &mut r.aedat_decoder,
+            &mut r.packet_queue,
+            r.height as i32,
+            r.width as i32,
+        ).unwrap();
+        r.event_adder.blur_info = Some(blur_info);
+
+        r
+    }
+
+}
+
+impl Reconstructor<UnixStream> {
+    pub fn new(
+        directory: String,
+        aedat_filename: String,
+        start_c: f64,
+        optimize_c: bool,
+        display: bool,
+        blurred_display: bool,
+        output_fps: f64,
+    ) -> Reconstructor<UnixStream>
+    {
         // https://gitlab.com/inivation/dv/dv-python/-/tree/master/
-        // let socket = Path::new("/tmp/dv-runtime2.sock");
-        //
-        // let mut stream = match UnixStream::connect(&socket) {
-        //     Err(_) => panic!("server is not running"),
-        //     Ok(stream) => stream
-        // };
-        // // Connect to socket
-        // // let mut reader = io::BufReader::new(&mut stream);
-        //
-        // // let received: Vec<u8> = reader.fill_buf().unwrap().to_vec();
-        // let mut bytes = [0; 4];
-        // stream.read_exact(&mut bytes).unwrap();
-        // let id = u32::from_le_bytes(bytes);
-        //
-        // let mut bytes = [0; 4];
-        // stream.read_exact(&mut bytes).unwrap();
-        // let length = u32::from_le_bytes(bytes);
-        //
-        // let mut raw_buffer = std::vec![0; length as usize];
-        // stream.read_exact(&mut raw_buffer).unwrap();
-
-
-        // let mut io_header = [0_u8; 8];
-        // stream.read_exact(&mut io_header).unwrap();
-        // let io_header = &io_header[4..8];
-        // let length = u32::from_le_bytes(*io_header);
-        // let mut cursor = Cursor::new(io_header);
-        // let length = cursor.read_u32::<LittleEndian>().unwrap() as usize;
-        // assert_eq!(length % 4, 0);
-        //
-        // let mut packet = vec![0_u8; length];
-        // stream.read_exact(&mut packet).unwrap();
-        // let id = &packet[0..4];
-        // let packet_data = &packet[4..];
-        // for letter in id {
-        //     println!("{}", letter.to_string());
-        // }
-
-        // reader.consume(8);
-        // let received: Vec<u8> = loop {
-        //     let tmp = reader.fill_buf().unwrap().to_vec();
-        //     if tmp.len() < length {
-        //         sleep(Duration::from_millis(100));
-        //     } else {
-        //         break tmp
-        //     }
-        // };
-        // let packet = &received[4..length];
-        // reader.consume(length);
-        // let mut buf = [0; 128];
-        // stream.read(&mut buf).unwrap();
-
-        let tmp = Path::new(&(directory.clone() + "/" + &aedat_filename));
 
         let mut aedat_decoder =
-            aedat::base::Decoder::new(Path::new(&(directory + "/" + &aedat_filename))).unwrap();
-        // let (height, width) = split_camera_info(&aedat_decoder.id_to_stream[&0]);
+            aedat::base::Decoder::<UnixStream>::new(Path::new(&(directory + "/" + &aedat_filename))).unwrap();
         let height = 260;
         let width = 346;
         let mut event_counter = Mat::default();
@@ -183,6 +203,22 @@ impl Reconstructor {
 
         r
     }
+}
+
+impl <T: Source + std::io::Read> Reconstructor<T> {
+    // pub fn new(
+    //     directory: String,
+    //     aedat_filename: String,
+    //     start_c: f64,
+    //     optimize_c: bool,
+    //     display: bool,
+    //     blurred_display: bool,
+    //     output_fps: f64,
+    // ) -> Reconstructor<T>
+    //     where T: std::io::Read + Source
+    // {
+    //
+    // }
 
     /// Generates reconstructed images from the next packet of events
     fn get_more_images(&mut self) -> Result<(), SimpleError>{
@@ -241,8 +277,8 @@ impl Reconstructor {
 }
 
 /// Read packets until the next APS frame is reached (inclusive)
-fn fill_packet_queue_to_frame(
-    aedat_decoder: &mut aedat::base::Decoder,
+fn fill_packet_queue_to_frame<T: Source + std::io::Read>(
+    aedat_decoder: &mut aedat::base::Decoder<T>,
     packet_queue: &mut VecDeque<Packet>,
     height: i32,
     width: i32) -> Result<BlurInfo, SimpleError> {
@@ -319,7 +355,7 @@ pub struct LatentImage {
     pub frame: Mat,
 }
 
-impl Iterator for Reconstructor {
+impl <T: Source + std::io::Read> Iterator for Reconstructor<T> {
     type Item = Result<Mat, ReconstructionError>;
 
     /// Get the next reconstructed image
@@ -374,7 +410,7 @@ fn split_camera_info(stream: &Stream) -> (u16, u16) {
 }
 
 /// If [`MyArgs`]`.show_display`, shows the given [`Mat`] in an OpenCV window
-pub fn show_display(window_name: &str, mat: &Mat, wait: i32, reconstructor: &Reconstructor) {
+pub fn show_display<T: Source>(window_name: &str, mat: &Mat, wait: i32, reconstructor: &Reconstructor<T>) {
     if reconstructor.show_display {
         let mut tmp = Mat::default();
 

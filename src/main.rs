@@ -1,6 +1,7 @@
 use crate::reconstructor::{show_display, Reconstructor};
 use clap::Parser;
 use std::error::Error;
+use std::fs::File;
 use std::time::Instant;
 
 use serde::Deserialize;
@@ -51,7 +52,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let content = std::fs::read_to_string(args.args_filename)?;
         args = toml::from_str(&content).unwrap();
     }
-    let mut reconstructor = Reconstructor::new(
+    let mut reconstructor = Reconstructor::<File>::new(
         args.base_path,
         args.events_filename,
         args.start_c,
