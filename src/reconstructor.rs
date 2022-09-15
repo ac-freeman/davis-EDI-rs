@@ -293,7 +293,7 @@ fn fill_packet_queue_to_frame<T: Source + std::io::Read>(
     loop {
         match aedat_decoder.next() {
             Some(Ok(p)) => {
-                if p.stream_id == aedat::base::StreamContent::Frame as u32 {
+                if matches!(aedat_decoder.id_to_stream.get(&p.stream_id).unwrap().content, aedat::base::StreamContent::Frame) {
                     let frame =
                         match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer) {
                             Ok(result) => result,
@@ -321,7 +321,7 @@ fn fill_packet_queue_to_frame<T: Source + std::io::Read>(
                     );
 
                     // return Ok(blur_info);
-                } else if p.stream_id == aedat::base::StreamContent::Events as u32 {
+                } else if matches!(aedat_decoder.id_to_stream.get(&p.stream_id).unwrap().content, aedat::base::StreamContent::Events) {
                     packet_queue.push_back(p);
                 }
             }
