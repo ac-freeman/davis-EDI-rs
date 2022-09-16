@@ -1,6 +1,5 @@
 use crate::event_adder::{BlurInfo, deblur_image, EventAdder};
-use aedat::base::{Decoder, Packet, ParseError, Stream, StreamContent};
-use aedat::base::ioheader_generated::Compression;
+use aedat::base::{Decoder, Packet, ParseError, Stream, StreamContent, ioheader_generated::Compression};
 
 use opencv::core::{
     Mat, MatTrait, MatTraitConst, Size, CV_8S,
@@ -58,10 +57,10 @@ impl Reconstructor {
     {
         let mut decoder_0= match mode.as_str() {
             "file" => {
-                aedat::base::Decoder::new_from_file(Path::new(&(directory.clone() + "/" + &aedat_filename_0))).unwrap()
+                Decoder::new_from_file(Path::new(&(directory.clone() + "/" + &aedat_filename_0))).unwrap()
             }
             "socket" => {
-                aedat::base::Decoder::new_from_unix_stream(
+                Decoder::new_from_unix_stream(
                     Path::new(&(directory.clone() + "/" + &aedat_filename_0)),
                     StreamContent::Events,
                     compression,
@@ -70,7 +69,7 @@ impl Reconstructor {
                 ).unwrap()
             }
             "tcp" => {
-                aedat::base::Decoder::new_from_tcp_stream(
+                Decoder::new_from_tcp_stream(
                     &(directory.clone() + "/" + &aedat_filename_0),
                     StreamContent::Events,
                     compression,
@@ -87,7 +86,7 @@ impl Reconstructor {
                 None
             }
             "socket" => {
-                Some(aedat::base::Decoder::new_from_unix_stream(
+                Some(Decoder::new_from_unix_stream(
                     Path::new(&(directory + "/" + &aedat_filename_1)),
                     StreamContent::Frame,
                     compression,
@@ -96,7 +95,7 @@ impl Reconstructor {
                 ).unwrap())
             }
             "tcp" => {
-                Some(aedat::base::Decoder::new_from_tcp_stream(
+                Some(Decoder::new_from_tcp_stream(
                     &(directory + "/" + &aedat_filename_1),
                     StreamContent::Frame,
                     compression,
@@ -124,7 +123,7 @@ impl Reconstructor {
         if decoder_1.is_none() {
             loop {
                 if let Ok(p) = decoder_0.next().unwrap() {
-                    if matches!(decoder_0.id_to_stream.get(&p.stream_id).unwrap().content, aedat::base::StreamContent::Frame) {
+                    if matches!(decoder_0.id_to_stream.get(&p.stream_id).unwrap().content, StreamContent::Frame) {
                         match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer)
                         {
                             Ok(result) => result,
@@ -137,8 +136,6 @@ impl Reconstructor {
                 }
             }
         }
-
-
 
         let mut r = Reconstructor {
             show_display: display,
@@ -169,14 +166,12 @@ impl Reconstructor {
         r
     }
 
-
     /// Generates reconstructed images from the next packet of events
     fn get_more_images(&mut self) -> Result<(), SimpleError>{
-
         while let Some(p) = self.packet_queue.pop_front() {
             match self.aedat_decoder_0.id_to_stream.get(&p.stream_id).unwrap().content {
-                    aedat::base::StreamContent::Frame => {}
-                    aedat::base::StreamContent::Events => {
+                    StreamContent::Frame => {}
+                    StreamContent::Events => {
                         self.event_adder.sort_events(p);
                     }
                     _ => {
@@ -248,7 +243,7 @@ fn fill_packet_queue_to_frame_from_file(
     let blur_info = loop {
         match aedat_decoder_0.next() {
             Some(Ok(p)) => {
-                if matches!(aedat_decoder_0.id_to_stream.get(&p.stream_id).unwrap().content, aedat::base::StreamContent::Frame) {
+                if matches!(aedat_decoder_0.id_to_stream.get(&p.stream_id).unwrap().content, StreamContent::Frame) {
                     let frame =
                         match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer) {
                             Ok(result) => result,
@@ -276,7 +271,7 @@ fn fill_packet_queue_to_frame_from_file(
                     );
 
                     break blur_info
-                } else if matches!(aedat_decoder_0.id_to_stream.get(&p.stream_id).unwrap().content, aedat::base::StreamContent::Events) {
+                } else if matches!(aedat_decoder_0.id_to_stream.get(&p.stream_id).unwrap().content, StreamContent::Events) {
                     packet_queue.push_back(p);
                 }
             }
@@ -314,7 +309,7 @@ fn fill_packet_queue_to_frame_from_socket(
     // first, get the next frame
     let blur_info = match aedat_decoder_1.next() {
         Some(Ok(p)) => {
-            if matches!(aedat_decoder_1.id_to_stream.get(&p.stream_id).unwrap().content, aedat::base::StreamContent::Frame) {
+            if matches!(aedat_decoder_1.id_to_stream.get(&p.stream_id).unwrap().content, StreamContent::Frame) {
                 let frame =
                     match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer) {
                         Ok(result) => result,
@@ -354,7 +349,7 @@ fn fill_packet_queue_to_frame_from_socket(
     loop {
         match aedat_decoder_0.next() {
             Some(Ok(p)) => {
-                if matches!(aedat_decoder_0.id_to_stream.get(&p.stream_id).unwrap().content, aedat::base::StreamContent::Events) {
+                if matches!(aedat_decoder_0.id_to_stream.get(&p.stream_id).unwrap().content, StreamContent::Events) {
                     let done = {
                         let event_packet =
                             match aedat::events_generated::size_prefixed_root_as_event_packet(&p.buffer) {
