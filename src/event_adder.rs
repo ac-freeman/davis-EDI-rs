@@ -462,7 +462,7 @@ use opencv::imgproc::{sobel, THRESH_BINARY, threshold};
 pub struct BlurInfo {
     pub blurred_image: OMatrix<f64, Dynamic, Dynamic>,
     exposure_begin_t: i64,
-    exposure_end_t: i64,
+    pub exposure_end_t: i64,
     pub init: bool, // TODO: not very rusty
 }
 
