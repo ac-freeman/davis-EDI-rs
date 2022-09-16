@@ -124,31 +124,31 @@ impl Reconstructor {
         let output_frame_length = (1000000.0 / output_fps) as i64;
 
         // Get the first frame and ignore events before it
-        // loop {
-        //     if let Ok(p) = decoder_0.next().unwrap() {
-        //         if matches!(decoder_0.id_to_stream.get(&p.stream_id).unwrap().content, aedat::base::StreamContent::Frame) {
-        //             match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer)
-        //             {
-        //                 Ok(result) => result,
-        //                 Err(_) => {
-        //                     panic!("the packet does not have a size prefix");
-        //                 }
-        //             };
-        //             break;
-        //         }
-        //     }
-        // }
+        loop {
+            if let Ok(p) = decoder_0.next().unwrap() {
+                if matches!(decoder_0.id_to_stream.get(&p.stream_id).unwrap().content, aedat::base::StreamContent::Frame) {
+                    match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer)
+                    {
+                        Ok(result) => result,
+                        Err(_) => {
+                            panic!("the packet does not have a size prefix");
+                        }
+                    };
+                    break;
+                }
+            }
+        }
 
 
 
         let mut r = Reconstructor {
-            show_display: false,
-            show_blurred_display: false,
+            show_display: display,
+            show_blurred_display: blurred_display,
             aedat_decoder_0: decoder_0,
             aedat_decoder_1: decoder_1,
             height: height as usize,
             width: width as usize,
-            packet_queue: Default::default(),
+            packet_queue,
             event_adder: EventAdder::new(
                 height as usize,
                 width as usize,
@@ -267,8 +267,8 @@ fn fill_packet_queue_to_frame_from_file(
                     }
 
                     // TODO: TMP
-                    let tmp_blurred_mat = Mat::try_from_cv(&image).unwrap();
-                    _show_display_force("blurred input", &tmp_blurred_mat, 1, false);
+                    // let tmp_blurred_mat = Mat::try_from_cv(&image).unwrap();
+                    // _show_display_force("blurred input", &tmp_blurred_mat, 1, false);
 
                     let blur_info = BlurInfo::new(
                         image,
@@ -286,17 +286,17 @@ fn fill_packet_queue_to_frame_from_file(
         }
     };
 
-    match aedat_decoder_0.next() {
-        Some(Ok(p)) => {
-            if matches!(aedat_decoder_0.id_to_stream.get(&p.stream_id).unwrap().content, aedat::base::StreamContent::Events) {
-                packet_queue.push_back(p);
-            } else {
-                panic!("TODO handle sparse events")
-            }
-        },
-        Some(Err(e)) => panic!("{}", e),
-        None => return Err(SimpleError::new("End of aedat file"))
-    }
+    // match aedat_decoder_0.next() {
+    //     Some(Ok(p)) => {
+    //         if matches!(aedat_decoder_0.id_to_stream.get(&p.stream_id).unwrap().content, aedat::base::StreamContent::Events) {
+    //             packet_queue.push_back(p);
+    //         } else {
+    //             panic!("TODO handle sparse events")
+    //         }
+    //     },
+    //     Some(Err(e)) => panic!("{}", e),
+    //     None => return Err(SimpleError::new("End of aedat file"))
+    // }
 
     Ok(blur_info)
 
