@@ -241,9 +241,15 @@ impl EventAdder {
     }
 
     fn get_latent_and_edge(&self, c: f64, timestamp_start: i64) -> (Mat, Mat) {
+        let mut latent_image = DMatrix::<f64>::zeros(self.height as usize, self.width as usize);
+        let mut edge_image = latent_image.clone();
         if self.event_during_queue.is_empty() {
-            panic!("No during queue")
+            return (
+                Mat::try_from_cv(self.blur_info.as_ref().unwrap().blurred_image.clone_owned()).unwrap(),
+                Mat::try_from_cv(edge_image).unwrap()
+            )
         }
+
         // TODO: Need to avoid having to traverse the whole queue each time?
         let mut start_index = 0;
         loop {
@@ -254,8 +260,7 @@ impl EventAdder {
             start_index += 1;
         }
 
-        let mut latent_image = DMatrix::<f64>::zeros(self.height as usize, self.width as usize);
-        let mut edge_image = latent_image.clone();
+
         //
         let mut event_counter = latent_image.clone();
         let mut timestamps = latent_image.clone();
