@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::thread;
 use aedat::base::{Decoder, Packet, ParseError};
 use crossbeam::channel::bounded;
@@ -63,9 +64,16 @@ fn setup_file_threads(sender: tokio::sync::mpsc::Sender<Packet>, mut decoder_0: 
 }
 
 fn setup_socket_threads(
-    sender: tokio::sync::mpsc::UnboundedSender<Packet>,
+    sender_main: tokio::sync::mpsc::UnboundedSender<Packet>,
     mut decoder_0: Decoder,
     mut decoder_1: Decoder) {
+
+    // TODO: There's probably a better way of doing this... Use non-blocking socket/tcp connections?
+
+
+    let (sender_0, mut receiver_0): (tokio::sync::mpsc::UnboundedSender<Packet>, tokio::sync::mpsc::UnboundedReceiver<Packet>)
+        = tokio::sync::mpsc::unbounded_channel();
+    // Create thread for decoder_0
     tokio::spawn(async move {
         loop {
             match decoder_0.next() {
@@ -74,12 +82,57 @@ fn setup_socket_threads(
                     break
                 },
                 Some(Ok(p)) => {
-                    if let Err(_) = sender.send(p) {
+                    if let Err(_) = sender_0.send(p) {
                         println!("receiver dropped");
                         return;
                     }
                 }
                 Some(Err(e)) => panic!("{}", e),
+            }
+        }
+    });
+
+    let (sender_1, mut receiver_1): (tokio::sync::mpsc::UnboundedSender<Packet>, tokio::sync::mpsc::UnboundedReceiver<Packet>)
+        = tokio::sync::mpsc::unbounded_channel();
+    // Create thread for decoder_1
+    tokio::spawn(async move {
+        loop {
+            match decoder_1.next() {
+                None => {
+                    eprintln!("End of file. Leaving reader thread");
+                    break
+                },
+                Some(Ok(p)) => {
+                    if let Err(_) = sender_1.send(p) {
+                        println!("receiver dropped");
+                        return;
+                    }
+                }
+                Some(Err(e)) => panic!("{}", e),
+            }
+        }
+    });
+
+    // create listener thread to collate packet messages
+    tokio::spawn(async move {
+        loop {
+            match receiver_0.recv().await {
+                Some(p) => {
+                    if let Err(_) = sender_main.send(p) {
+                        println!("receiver dropped");
+                        return;
+                    }
+                }
+                _ => {}
+            }
+            match receiver_1.recv().await {
+                Some(p) => {
+                    if let Err(_) = sender_main.send(p) {
+                        println!("receiver dropped");
+                        return;
+                    }
+                }
+                _ => {}
             }
         }
     });
