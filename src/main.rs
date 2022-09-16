@@ -1,19 +1,15 @@
 // use crate::reconstructor::{show_display, Reconstructor, Reconstructors, ReconstructionError};
 use clap::Parser;
 use std::error::Error;
-use std::fs::File;
-use std::os::unix::net::UnixStream;
 use std::time::Instant;
 use aedat::base::ioheader_generated::Compression;
 
 use serde::Deserialize;
-use opencv::core::Mat;
 use crate::reconstructor::Reconstructor;
 use crate::reconstructor::show_display;
 
 mod event_adder;
 mod reconstructor;
-mod reconstructor2;
 
 #[derive(Parser, Debug, Deserialize, Default)]
 pub struct Args {

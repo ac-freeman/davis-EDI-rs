@@ -10,9 +10,7 @@ use opencv::highgui;
 use opencv::imgproc::{blur, resize};
 use std::collections::VecDeque;
 use std::{io, mem};
-use std::fs::File;
-use std::io::{BufRead, Cursor, Read, Write};
-use std::os::unix::net::UnixStream;
+use std::io::{Write};
 use std::path::Path;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
@@ -20,7 +18,6 @@ use simple_error::SimpleError;
 use crossbeam_utils::thread;
 use nalgebra::DMatrix;
 use cv_convert::TryFromCv;
-use byteorder::{LittleEndian, ReadBytesExt};
 
 #[derive(Default)]
 pub struct BlurredInput {
@@ -84,7 +81,7 @@ impl Reconstructor {
             _ => panic!("")
         };
 
-        let mut decoder_1= match mode.as_str() {
+        let decoder_1= match mode.as_str() {
             "file" => {
                 (height, width) = split_camera_info(&decoder_0.id_to_stream[&0]);
                 None
