@@ -124,17 +124,19 @@ impl Reconstructor {
         let output_frame_length = (1000000.0 / output_fps) as i64;
 
         // Get the first frame and ignore events before it
-        loop {
-            if let Ok(p) = decoder_0.next().unwrap() {
-                if matches!(decoder_0.id_to_stream.get(&p.stream_id).unwrap().content, aedat::base::StreamContent::Frame) {
-                    match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer)
-                    {
-                        Ok(result) => result,
-                        Err(_) => {
-                            panic!("the packet does not have a size prefix");
-                        }
-                    };
-                    break;
+        if decoder_1.is_none() {
+            loop {
+                if let Ok(p) = decoder_0.next().unwrap() {
+                    if matches!(decoder_0.id_to_stream.get(&p.stream_id).unwrap().content, aedat::base::StreamContent::Frame) {
+                        match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer)
+                        {
+                            Ok(result) => result,
+                            Err(_) => {
+                                panic!("the packet does not have a size prefix");
+                            }
+                        };
+                        break;
+                    }
                 }
             }
         }
