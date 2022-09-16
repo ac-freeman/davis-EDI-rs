@@ -10,6 +10,7 @@ use crate::reconstructor::show_display;
 
 mod event_adder;
 mod reconstructor;
+mod threaded_decoder;
 
 #[derive(Parser, Debug, Deserialize, Default)]
 pub struct Args {
@@ -55,6 +56,7 @@ pub struct Args {
     #[clap(short, long, default_value_t = 100.0)]
     pub(crate) output_fps: f64,
 }
+
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args: Args = Args::parse();

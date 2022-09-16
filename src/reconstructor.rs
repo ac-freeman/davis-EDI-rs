@@ -37,6 +37,7 @@ pub struct Reconstructor {
     packet_queue: VecDeque<Packet>,
     event_adder: EventAdder,
     latent_image_queue: VecDeque<Mat>,
+    // packet_listener:
 }
 
 impl Reconstructor {

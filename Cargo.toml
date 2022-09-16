@@ -17,6 +17,8 @@ crossbeam = "0.8.2"
 crossbeam-utils = "0.8.11"
 nalgebra = "0.31.1"
 byteorder = "1.4.3"
+tokio = { version = "1.21.1", features = ["full"] }
+
 
 [dependencies.cv-convert]
 version = '0.20.0'
@@ -26,9 +28,9 @@ features = [
 ]
 
 # For debugging aedat-rs usage
-[profile.dev.package."*"]
-# Set the default for dependencies in Development mode.
-opt-level = 0
+#[profile.dev.package."*"]
+## Set the default for dependencies in Development mode.
+#opt-level = 0
 
 [profile.release]
 lto = true
