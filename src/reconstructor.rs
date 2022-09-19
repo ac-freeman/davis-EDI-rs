@@ -40,6 +40,7 @@ pub struct Reconstructor {
     packet_queue: VecDeque<Packet>,
     event_adder: EventAdder,
     latent_image_queue: VecDeque<Mat>,
+    output_fps: f64,
     // packet_listener:
 }
 
@@ -155,7 +156,8 @@ impl Reconstructor {
                 start_c,
                 optimize_c,
             ),
-            latent_image_queue: Default::default()
+            latent_image_queue: Default::default(),
+            output_fps
         };
         let blur_info = fill_packet_queue_to_frame(
             &mut r.packet_receiver,
@@ -203,8 +205,10 @@ impl Reconstructor {
                     running_fps,
                     self.event_adder.current_c
                 );
-                if ((1000000.0 / running_fps) as i64 - self.event_adder.interval_t).abs() > 1000000 / 500 {
-                    self.event_adder.interval_t = (1000000.0 / running_fps) as i64;
+                if ((1000000.0 / running_fps) as i64 - self.event_adder.interval_t).abs() > 1000000 / 50000
+                    {
+                    self.event_adder.interval_t = (1000000.0 / running_fps).max(1000000.0 / self.output_fps) as i64;
+                    print!(" Target FPS: {}", 1000000 / self.event_adder.interval_t);
                 }
                 io::stdout().flush().unwrap();
                 match self.latent_image_queue.pop_front() {
