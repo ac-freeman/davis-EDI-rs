@@ -203,6 +203,9 @@ impl Reconstructor {
                     running_fps,
                     self.event_adder.current_c
                 );
+                if ((1000000.0 / running_fps) as i64 - self.event_adder.interval_t).abs() > 1000000 / 500 {
+                    self.event_adder.interval_t = (1000000.0 / running_fps) as i64;
+                }
                 io::stdout().flush().unwrap();
                 match self.latent_image_queue.pop_front() {
                     None => {

@@ -20,7 +20,7 @@ pub struct DeblurReturn {
 
 pub struct EventAdder {
     /// The time span of each reconstructed frame
-    interval_t: i64,
+    pub(crate) interval_t: i64,
 
     /// Events occurring before the current blurred image
     event_before_queue: Vec<Event>,
