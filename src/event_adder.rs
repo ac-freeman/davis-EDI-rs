@@ -389,15 +389,17 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
                 }
             }
 
-            intermediate_interval_start_timestamps
-                .par_iter_mut()
-                .for_each(|(timestamp_start, mat)| {
-                    // let c = optimize_c()
-                    *mat = event_adder.get_intermediate_image(event_adder.current_c, *timestamp_start);
-                });
+            if !event_adder.event_before_queue.is_empty() {
+                intermediate_interval_start_timestamps
+                    .par_iter_mut()
+                    .for_each(|(timestamp_start, mat)| {
+                        // let c = optimize_c()
+                        *mat = event_adder.get_intermediate_image(event_adder.current_c, *timestamp_start);
+                    });
 
-            for elem in intermediate_interval_start_timestamps {
-                ret_vec.push(elem.1)
+                for elem in intermediate_interval_start_timestamps {
+                    ret_vec.push(elem.1)
+                }
             }
         }
 
