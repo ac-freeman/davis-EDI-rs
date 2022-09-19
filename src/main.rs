@@ -97,8 +97,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         panic!("No image")
                     }
                 };
-                // let mut mat_8u = Mat::default();
-                // image.convert_to(&mut mat_8u, CV_8U, 255.0, 0.0).unwrap();
 
                 // Don't refresh the window more than 60 Hz
                 if (Instant::now() - last_time).as_millis() > args.output_fps as u128 / 60 {

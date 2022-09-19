@@ -168,8 +168,6 @@ impl Reconstructor {
         r
     }
 
-    // type Item = Result<Mat, ReconstructionError>;
-
     /// Get the next reconstructed image
     pub(crate) async fn next(&mut self) -> Option<Result<Mat, ReconstructionError>> {
         return match self.latent_image_queue.pop_front() {
@@ -187,8 +185,6 @@ impl Reconstructor {
                     );
                     self.event_adder.next_blur_info = None;
                 }
-                //
-                //     self.fill_packet_queue_to_frame()
 
                 // let join_handle: thread::JoinHandle<_> = thread::spawn(|| {
                 match self.get_more_images().await {
@@ -323,10 +319,6 @@ async fn fill_packet_queue_to_frame(
                         }
                     }
 
-                    // TODO: TMP
-                    // let tmp_blurred_mat = Mat::try_from_cv(&image).unwrap();
-                    // _show_display_force("blurred input", &tmp_blurred_mat, 1, false);
-
                     let blur_info =
                         BlurInfo::new(image, frame.exposure_begin_t(), frame.exposure_end_t());
 
@@ -338,22 +330,24 @@ async fn fill_packet_queue_to_frame(
                     packet_queue.push_back(p);
                 }
             }
-            // Some(Err(e)) => panic!("{}", e),
             None => return Err(SimpleError::new("End of aedat file")),
         }
     };
 
-    // match aedat_decoder_0.next() {
-    //     Some(Ok(p)) => {
-    //         if matches!(aedat_decoder_0.id_to_stream.get(&p.stream_id).unwrap().content, aedat::base::StreamContent::Events) {
-    //             packet_queue.push_back(p);
-    //         } else {
-    //             panic!("TODO handle sparse events")
-    //         }
-    //     },
-    //     Some(Err(e)) => panic!("{}", e),
-    //     None => return Err(SimpleError::new("End of aedat file"))
-    // }
+    match packet_receiver.next().await {
+        Some(p) => {
+            if matches!(
+                    FromPrimitive::from_u32(p.stream_id),
+                    Some(StreamContent::Events)
+                )
+            {
+                packet_queue.push_back(p);
+            } else {
+                panic!("TODO handle sparse events")
+            }
+        },
+        None => return Err(SimpleError::new("End of aedat file"))
+    };
 
     Ok(blur_info)
 }

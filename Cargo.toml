@@ -10,7 +10,8 @@ opencv = "0.66.0"
 clap = { version = "3.0.10", features = ["derive"] }
 rayon = "1.5"
 toml = "0.5.8"
-aedat = { path = "../aedat-rs" }
+#aedat = { path = "../aedat-rs" }
+aedat = "1.2.7"
 serde = {version = "1.0.136", features = ["derive"]}
 simple-error = "0.2.3"
 crossbeam = "0.8.2"
