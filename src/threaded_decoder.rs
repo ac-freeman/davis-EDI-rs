@@ -57,7 +57,7 @@ fn setup_file_threads(sender: tokio::sync::mpsc::Sender<Packet>, mut decoder_0: 
                     break;
                 }
                 Some(Ok(p)) => {
-                    if let Err(_) = sender.send(p).await {
+                    if (sender.send(p).await).is_err() {
                         println!("receiver dropped");
                         return;
                     }
@@ -85,7 +85,7 @@ fn setup_socket_threads(
                 }
                 Some(Ok(mut p)) => {
                     p.stream_id = decoder_0.id_to_stream.get(&p.stream_id).unwrap().content as u32;
-                    if let Err(_) = sender_0.send(p) {
+                    if sender_0.send(p).is_err() {
                         println!("receiver dropped");
                         return;
                     }
@@ -107,7 +107,7 @@ fn setup_socket_threads(
                 }
                 Some(Ok(mut p)) => {
                     p.stream_id = decoder_1.id_to_stream.get(&p.stream_id).unwrap().content as u32;
-                    if let Err(_) = sender_1.send(p) {
+                    if sender_1.send(p).is_err() {
                         println!("receiver dropped");
                         return;
                     }
