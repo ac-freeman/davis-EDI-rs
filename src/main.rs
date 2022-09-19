@@ -1,12 +1,12 @@
 // use crate::reconstructor::{show_display, Reconstructor, Reconstructors, ReconstructionError};
+use aedat::base::ioheader_generated::Compression;
 use clap::Parser;
 use std::error::Error;
 use std::time::Instant;
-use aedat::base::ioheader_generated::Compression;
 
-use serde::Deserialize;
-use crate::reconstructor::Reconstructor;
 use crate::reconstructor::show_display;
+use crate::reconstructor::Reconstructor;
+use serde::Deserialize;
 
 mod event_adder;
 mod reconstructor;
@@ -57,7 +57,6 @@ pub struct Args {
     pub(crate) output_fps: f64,
 }
 
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let mut args: Args = Args::parse();
@@ -79,7 +78,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Compression::None,
         346,
         260,
-    ).await;
+    )
+    .await;
     let mut last_time = Instant::now();
     let first_time = last_time;
     let mut frame_count = 0;
@@ -110,9 +110,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     }
-    println!("Reconstructed {} frames in {} seconds, at an average {} FPS",
-             frame_count,
-             (Instant::now() - first_time).as_secs(),
-             frame_count as f32 / (Instant::now() - first_time).as_secs_f32());
+    println!(
+        "Reconstructed {} frames in {} seconds, at an average {} FPS",
+        frame_count,
+        (Instant::now() - first_time).as_secs(),
+        frame_count as f32 / (Instant::now() - first_time).as_secs_f32()
+    );
     Ok(())
 }

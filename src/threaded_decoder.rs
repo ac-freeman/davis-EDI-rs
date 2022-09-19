@@ -1,5 +1,5 @@
 use aedat::base::{Decoder, Packet};
-use tokio::sync::mpsc::{UnboundedReceiver, Receiver};
+use tokio::sync::mpsc::{Receiver, UnboundedReceiver};
 
 pub(crate) struct PacketReceiver {
     bounded_receiver: Option<Receiver<Packet>>,
@@ -9,29 +9,37 @@ pub(crate) struct PacketReceiver {
 impl PacketReceiver {
     pub(crate) async fn next(&mut self) -> Option<Packet> {
         if self.bounded_receiver.is_some() {
-            return self.bounded_receiver.as_mut().unwrap().recv().await
+            return self.bounded_receiver.as_mut().unwrap().recv().await;
         }
         if self.unbounded_receiver.is_some() {
-            return self.unbounded_receiver.as_mut().unwrap().recv().await
+            return self.unbounded_receiver.as_mut().unwrap().recv().await;
         }
         None
     }
 }
 
-pub(crate) fn setup_packet_threads(aedat_decoder_0: Decoder,
-                        aedat_decoder_1: Option<Decoder>) -> PacketReceiver {
-
-    let mut packet_receiver = PacketReceiver { bounded_receiver: None, unbounded_receiver: None };
+pub(crate) fn setup_packet_threads(
+    aedat_decoder_0: Decoder,
+    aedat_decoder_1: Option<Decoder>,
+) -> PacketReceiver {
+    let mut packet_receiver = PacketReceiver {
+        bounded_receiver: None,
+        unbounded_receiver: None,
+    };
     match aedat_decoder_1 {
         None => {
-            let (sender, receiver): (tokio::sync::mpsc::Sender<Packet>, tokio::sync::mpsc::Receiver<Packet>)
-                = tokio::sync::mpsc::channel(2000);
+            let (sender, receiver): (
+                tokio::sync::mpsc::Sender<Packet>,
+                tokio::sync::mpsc::Receiver<Packet>,
+            ) = tokio::sync::mpsc::channel(2000);
             setup_file_threads(sender, aedat_decoder_0);
             packet_receiver.bounded_receiver = Some(receiver);
         }
         Some(decoder_1) => {
-            let (sender, receiver): (tokio::sync::mpsc::UnboundedSender<Packet>, tokio::sync::mpsc::UnboundedReceiver<Packet>)
-                = tokio::sync::mpsc::unbounded_channel();
+            let (sender, receiver): (
+                tokio::sync::mpsc::UnboundedSender<Packet>,
+                tokio::sync::mpsc::UnboundedReceiver<Packet>,
+            ) = tokio::sync::mpsc::unbounded_channel();
             setup_socket_threads(sender, aedat_decoder_0, decoder_1);
             packet_receiver.unbounded_receiver = Some(receiver);
         }
@@ -46,8 +54,8 @@ fn setup_file_threads(sender: tokio::sync::mpsc::Sender<Packet>, mut decoder_0: 
             match decoder_0.next() {
                 None => {
                     eprintln!("End of file. Leaving reader thread");
-                    break
-                },
+                    break;
+                }
                 Some(Ok(p)) => {
                     if let Err(_) = sender.send(p).await {
                         println!("receiver dropped");
@@ -63,8 +71,8 @@ fn setup_file_threads(sender: tokio::sync::mpsc::Sender<Packet>, mut decoder_0: 
 fn setup_socket_threads(
     sender_main: tokio::sync::mpsc::UnboundedSender<Packet>,
     mut decoder_0: Decoder,
-    mut decoder_1: Decoder) {
-
+    mut decoder_1: Decoder,
+) {
     let sender_0 = sender_main;
     let sender_1 = sender_0.clone();
     // Create thread for decoder_0
@@ -73,8 +81,8 @@ fn setup_socket_threads(
             match decoder_0.next() {
                 None => {
                     eprintln!("End of file. Leaving reader thread");
-                    break
-                },
+                    break;
+                }
                 Some(Ok(mut p)) => {
                     p.stream_id = decoder_0.id_to_stream.get(&p.stream_id).unwrap().content as u32;
                     if let Err(_) = sender_0.send(p) {
@@ -95,8 +103,8 @@ fn setup_socket_threads(
             match decoder_1.next() {
                 None => {
                     eprintln!("End of file. Leaving reader thread");
-                    break
-                },
+                    break;
+                }
                 Some(Ok(mut p)) => {
                     p.stream_id = decoder_1.id_to_stream.get(&p.stream_id).unwrap().content as u32;
                     if let Err(_) = sender_1.send(p) {

@@ -1,22 +1,21 @@
-use crate::event_adder::{BlurInfo, deblur_image, EventAdder};
-use aedat::base::{Decoder, Packet, ParseError, Stream, StreamContent, ioheader_generated::Compression};
-
-use opencv::core::{
-    Mat, MatTrait, MatTraitConst, Size, CV_8S,
-    NORM_MINMAX,
+use crate::event_adder::{deblur_image, BlurInfo, EventAdder};
+use aedat::base::{
+    ioheader_generated::Compression, Decoder, Packet, ParseError, Stream, StreamContent,
 };
-use opencv::highgui;
-use opencv::imgproc::{resize};
-use std::collections::VecDeque;
-use std::{io, mem};
-use std::io::{Write};
-use std::path::Path;
-use std::time::{Instant};
-use simple_error::SimpleError;
-use nalgebra::DMatrix;
+
+use crate::threaded_decoder::{setup_packet_threads, PacketReceiver};
 use cv_convert::TryFromCv;
+use nalgebra::DMatrix;
 use num_traits::FromPrimitive;
-use crate::threaded_decoder::{PacketReceiver, setup_packet_threads};
+use opencv::core::{Mat, MatTrait, MatTraitConst, Size, CV_8S, NORM_MINMAX};
+use opencv::highgui;
+use opencv::imgproc::resize;
+use simple_error::SimpleError;
+use std::collections::VecDeque;
+use std::io::Write;
+use std::path::Path;
+use std::time::Instant;
+use std::{io, mem};
 
 #[derive(Default)]
 pub struct BlurredInput {
@@ -24,8 +23,8 @@ pub struct BlurredInput {
     pub exposure_begin_t: i64,
     pub exposure_end_t: i64,
 }
-unsafe impl Sync for Reconstructor  {}
-unsafe impl Send for Reconstructor  {}
+unsafe impl Sync for Reconstructor {}
+unsafe impl Send for Reconstructor {}
 
 pub struct Reconstructor {
     show_display: bool,
@@ -53,60 +52,59 @@ impl Reconstructor {
         output_fps: f64,
         compression: Compression,
         mut width: u16,
-        mut height: u16
-    ) -> Reconstructor
-    {
-        let mut decoder_0= match mode.as_str() {
+        mut height: u16,
+    ) -> Reconstructor {
+        let mut decoder_0 = match mode.as_str() {
             "file" => {
-                Decoder::new_from_file(Path::new(&(directory.clone() + "/" + &aedat_filename_0))).unwrap()
+                Decoder::new_from_file(Path::new(&(directory.clone() + "/" + &aedat_filename_0)))
+                    .unwrap()
             }
-            "socket" => {
-                Decoder::new_from_unix_stream(
-                    Path::new(&(directory.clone() + "/" + &aedat_filename_0)),
-                    StreamContent::Events,
-                    compression,
-                    width,
-                    height
-                ).unwrap()
-            }
-            "tcp" => {
-                Decoder::new_from_tcp_stream(
-                    &(directory.clone() + "/" + &aedat_filename_0),
-                    StreamContent::Events,
-                    compression,
-                    width,
-                    height
-                ).unwrap()
-            }
-            _ => panic!("")
+            "socket" => Decoder::new_from_unix_stream(
+                Path::new(&(directory.clone() + "/" + &aedat_filename_0)),
+                StreamContent::Events,
+                compression,
+                width,
+                height,
+            )
+            .unwrap(),
+            "tcp" => Decoder::new_from_tcp_stream(
+                &(directory.clone() + "/" + &aedat_filename_0),
+                StreamContent::Events,
+                compression,
+                width,
+                height,
+            )
+            .unwrap(),
+            _ => panic!(""),
         };
 
-        let decoder_1= match mode.as_str() {
+        let decoder_1 = match mode.as_str() {
             "file" => {
                 (height, width) = split_camera_info(&decoder_0.id_to_stream[&0]);
                 None
             }
-            "socket" => {
-                Some(Decoder::new_from_unix_stream(
+            "socket" => Some(
+                Decoder::new_from_unix_stream(
                     Path::new(&(directory + "/" + &aedat_filename_1)),
                     StreamContent::Frame,
                     compression,
                     width,
-                    height
-                ).unwrap())
-            }
-            "tcp" => {
-                Some(Decoder::new_from_tcp_stream(
+                    height,
+                )
+                .unwrap(),
+            ),
+            "tcp" => Some(
+                Decoder::new_from_tcp_stream(
                     &(directory + "/" + &aedat_filename_1),
                     StreamContent::Frame,
                     compression,
                     width,
-                    height
-                ).unwrap())
-            }
-            _ => panic!("")
+                    height,
+                )
+                .unwrap(),
+            ),
+            _ => panic!(""),
         };
-
 
         let mut event_counter = Mat::default();
 
@@ -124,9 +122,11 @@ impl Reconstructor {
         if decoder_1.is_none() {
             loop {
                 if let Ok(p) = decoder_0.next().unwrap() {
-                    if matches!(decoder_0.id_to_stream.get(&p.stream_id).unwrap().content, StreamContent::Frame) {
-                        match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer)
-                        {
+                    if matches!(
+                        decoder_0.id_to_stream.get(&p.stream_id).unwrap().content,
+                        StreamContent::Frame
+                    ) {
+                        match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer) {
                             Ok(result) => result,
                             Err(_) => {
                                 panic!("the packet does not have a size prefix");
@@ -153,14 +153,16 @@ impl Reconstructor {
                 optimize_c,
             ),
             latent_image_queue: Default::default(),
-            output_fps
+            output_fps,
         };
         let blur_info = fill_packet_queue_to_frame(
             &mut r.packet_receiver,
             &mut r.packet_queue,
             r.height as i32,
             r.width as i32,
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
         r.event_adder.blur_info = Some(blur_info);
 
         r
@@ -179,21 +181,24 @@ impl Reconstructor {
                 let now = Instant::now();
 
                 if self.event_adder.next_blur_info.is_some() {
-                    mem::swap(&mut self.event_adder.blur_info, &mut self.event_adder.next_blur_info);
+                    mem::swap(
+                        &mut self.event_adder.blur_info,
+                        &mut self.event_adder.next_blur_info,
+                    );
                     self.event_adder.next_blur_info = None;
                 }
                 //
                 //     self.fill_packet_queue_to_frame()
 
-
                 // let join_handle: thread::JoinHandle<_> = thread::spawn(|| {
                 match self.get_more_images().await {
                     Ok(_) => {}
-                    Err(_) => return None
+                    Err(_) => return None,
                 };
                 // });
                 let running_fps = self.latent_image_queue.len() as f64
-                    / now.elapsed().as_millis() as f64 * 1000.0;
+                    / now.elapsed().as_millis() as f64
+                    * 1000.0;
                 print!(
                     "\r{} frames in  {}ms -- Current FPS: {:.2}, Current c: {:.5}",
                     self.latent_image_queue.len(),
@@ -201,11 +206,13 @@ impl Reconstructor {
                     running_fps,
                     self.event_adder.current_c
                 );
-                if ((1000000.0 / running_fps) as i64 - self.event_adder.interval_t).abs() > 1000000 / 50000
-                    {
-                    self.event_adder.interval_t = (1000000.0 / running_fps).max(1000000.0 / self.output_fps) as i64;
+                if ((1000000.0 / running_fps) as i64 - self.event_adder.interval_t).abs()
+                    > 1000000 / 50000
+                {
+                    self.event_adder.interval_t =
+                        (1000000.0 / running_fps).max(1000000.0 / self.output_fps) as i64;
                     print!(" Target FPS: {}", 1000000 / self.event_adder.interval_t);
-                        self.event_adder.optimize_c = false;
+                    self.event_adder.optimize_c = false;
                 } else {
                     self.event_adder.optimize_c = true;
                 }
@@ -242,24 +249,28 @@ impl Reconstructor {
         //     let join_handle = s.spawn(|_| {
         let deblur_res = {
             if self.show_blurred_display {
-                let tmp_blurred_mat = Mat::try_from_cv(&self.event_adder.blur_info.as_ref().unwrap().blurred_image).unwrap();
+                let tmp_blurred_mat =
+                    Mat::try_from_cv(&self.event_adder.blur_info.as_ref().unwrap().blurred_image)
+                        .unwrap();
                 _show_display_force("blurred input", &tmp_blurred_mat, 1, false);
             }
             deblur_image(&self.event_adder)
         };
-            // });
+        // });
 
-            let next_blur_info = match fill_packet_queue_to_frame(
-                &mut self.packet_receiver,
-                &mut self.packet_queue,
-                self.height as i32,
-                self.width as i32,
-            ).await {
-                Ok(blur_info) => { Some(blur_info) },
-                Err(_) => None
-            };
+        let next_blur_info = match fill_packet_queue_to_frame(
+            &mut self.packet_receiver,
+            &mut self.packet_queue,
+            self.height as i32,
+            self.width as i32,
+        )
+        .await
+        {
+            Ok(blur_info) => Some(blur_info),
+            Err(_) => None,
+        };
 
-            // (join_handle.join().unwrap(), next_blur_info)
+        // (join_handle.join().unwrap(), next_blur_info)
         // }) {
         match (deblur_res, next_blur_info) {
             (None, _) => {
@@ -267,15 +278,15 @@ impl Reconstructor {
             }
             (Some(deblur_return), Some(next_blur_info)) => {
                 self.event_adder.latent_image = deblur_return.ret_vec.last().unwrap().clone();
-                self.event_adder.last_interval_start_timestamp = deblur_return.last_interval_start_timestamp;
-                self.latent_image_queue.append(&mut VecDeque::from(deblur_return.ret_vec));
+                self.event_adder.last_interval_start_timestamp =
+                    deblur_return.last_interval_start_timestamp;
+                self.latent_image_queue
+                    .append(&mut VecDeque::from(deblur_return.ret_vec));
                 self.event_adder.reset_event_queues();
                 self.event_adder.next_blur_info = Some(next_blur_info);
                 self.event_adder.current_c = deblur_return.found_c;
             }
-            _ => {
-                return Err(SimpleError::new("End of aedat file"))
-            }
+            _ => return Err(SimpleError::new("End of aedat file")),
         };
 
         Ok(())
@@ -287,19 +298,22 @@ async fn fill_packet_queue_to_frame(
     packet_receiver: &mut PacketReceiver,
     packet_queue: &mut VecDeque<Packet>,
     height: i32,
-    width: i32) -> Result<BlurInfo, SimpleError> {
-
+    width: i32,
+) -> Result<BlurInfo, SimpleError> {
     let blur_info = loop {
         match packet_receiver.next().await {
             Some(p) => {
-                if matches!(FromPrimitive::from_u32(p.stream_id), Some(StreamContent::Frame)) {
-                    let frame =
-                        match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer) {
-                            Ok(result) => result,
-                            Err(_) => {
-                                panic!("the packet does not have a size prefix");
-                            }
-                        };
+                if matches!(
+                    FromPrimitive::from_u32(p.stream_id),
+                    Some(StreamContent::Frame)
+                ) {
+                    let frame = match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer)
+                    {
+                        Ok(result) => result,
+                        Err(_) => {
+                            panic!("the packet does not have a size prefix");
+                        }
+                    };
 
                     let frame_px = frame.pixels().unwrap();
                     let mut image = DMatrix::<f64>::zeros(height as usize, width as usize);
@@ -313,14 +327,14 @@ async fn fill_packet_queue_to_frame(
                     // let tmp_blurred_mat = Mat::try_from_cv(&image).unwrap();
                     // _show_display_force("blurred input", &tmp_blurred_mat, 1, false);
 
-                    let blur_info = BlurInfo::new(
-                        image,
-                        frame.exposure_begin_t(),
-                        frame.exposure_end_t(),
-                    );
+                    let blur_info =
+                        BlurInfo::new(image, frame.exposure_begin_t(), frame.exposure_end_t());
 
-                    break blur_info
-                } else if matches!(FromPrimitive::from_u32(p.stream_id), Some(StreamContent::Events)) {
+                    break blur_info;
+                } else if matches!(
+                    FromPrimitive::from_u32(p.stream_id),
+                    Some(StreamContent::Events)
+                ) {
                     packet_queue.push_back(p);
                 }
             }
@@ -473,7 +487,8 @@ pub fn _show_display_force(window_name: &str, mat: &Mat, wait: i32, normalize: b
             NORM_MINMAX,
             -1,
             &opencv::core::no_array(),
-        ).unwrap();
+        )
+        .unwrap();
     }
 
     if mat.rows() != 540 {
