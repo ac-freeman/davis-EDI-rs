@@ -37,7 +37,7 @@ pub struct EventAdder {
     pub(crate) blur_info: Option<BlurInfo>,
     pub(crate) next_blur_info: Option<BlurInfo>,
     pub(crate) current_c: f64,
-    optimize_c: bool,
+    pub(crate) optimize_c: bool,
 }
 
 unsafe impl Send for EventAdder {}
@@ -421,16 +421,21 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
         }
 
 
+        let new_c = match event_adder.optimize_c {
+            true => event_adder.optimize_c(interval_start_timestamps[interval_start_timestamps.len() / 2].0),
+            false => event_adder.current_c
+        };
+
 
         interval_start_timestamps
             .par_iter_mut()
             .for_each(|(timestamp_start, mat, found_c)| {
-                let c = match event_adder.optimize_c {
-                    true => {event_adder.optimize_c(*timestamp_start)},
-                    false => {event_adder.current_c}
-                };
-                *found_c = c;
-                *mat =  event_adder.get_latent_and_edge(c, *timestamp_start).0
+                // let c = match event_adder.optimize_c {
+                //     true => {event_adder.optimize_c(*timestamp_start)},
+                //     false => {event_adder.current_c}
+                // };
+                *found_c = new_c;
+                *mat =  event_adder.get_latent_and_edge(*found_c, *timestamp_start).0
             });
 
         // let mut ret_vec = Vec::with_capacity(interval_start_timestamps.len());

@@ -209,6 +209,9 @@ impl Reconstructor {
                     {
                     self.event_adder.interval_t = (1000000.0 / running_fps).max(1000000.0 / self.output_fps) as i64;
                     print!(" Target FPS: {}", 1000000 / self.event_adder.interval_t);
+                        self.event_adder.optimize_c = false;
+                } else {
+                    self.event_adder.optimize_c = true;
                 }
                 io::stdout().flush().unwrap();
                 match self.latent_image_queue.pop_front() {
