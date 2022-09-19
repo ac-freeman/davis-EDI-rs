@@ -3,8 +3,10 @@ use std::thread;
 use aedat::base::{Decoder, Packet, ParseError};
 use crossbeam::channel::bounded;
 use tokio::sync::mpsc::{UnboundedReceiver, Receiver};
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
 
-struct PacketReceiver {
+pub(crate) struct PacketReceiver {
     bounded_receiver: Option<Receiver<Packet>>,
     unbounded_receiver: Option<UnboundedReceiver<Packet>>,
 }
@@ -21,7 +23,7 @@ impl PacketReceiver {
     }
 }
 
-fn setup_threads(aedat_decoder_0: Decoder,
+pub(crate) fn setup_packet_threads(aedat_decoder_0: Decoder,
                         aedat_decoder_1: Option<Decoder>) -> PacketReceiver {
 
     let mut packet_receiver = PacketReceiver { bounded_receiver: None, unbounded_receiver: None };
@@ -68,11 +70,8 @@ fn setup_socket_threads(
     mut decoder_0: Decoder,
     mut decoder_1: Decoder) {
 
-    // TODO: There's probably a better way of doing this... Use non-blocking socket/tcp connections?
-
-
-    let (sender_0, mut receiver_0): (tokio::sync::mpsc::UnboundedSender<Packet>, tokio::sync::mpsc::UnboundedReceiver<Packet>)
-        = tokio::sync::mpsc::unbounded_channel();
+    let sender_0 = sender_main;
+    let sender_1 = sender_0.clone();
     // Create thread for decoder_0
     tokio::spawn(async move {
         loop {
@@ -81,7 +80,8 @@ fn setup_socket_threads(
                     eprintln!("End of file. Leaving reader thread");
                     break
                 },
-                Some(Ok(p)) => {
+                Some(Ok(mut p)) => {
+                    p.stream_id = decoder_0.id_to_stream.get(&p.stream_id).unwrap().content as u32;
                     if let Err(_) = sender_0.send(p) {
                         println!("receiver dropped");
                         return;
@@ -92,8 +92,8 @@ fn setup_socket_threads(
         }
     });
 
-    let (sender_1, mut receiver_1): (tokio::sync::mpsc::UnboundedSender<Packet>, tokio::sync::mpsc::UnboundedReceiver<Packet>)
-        = tokio::sync::mpsc::unbounded_channel();
+    // let (sender_1, mut receiver_1): (tokio::sync::mpsc::UnboundedSender<Packet>, tokio::sync::mpsc::UnboundedReceiver<Packet>)
+    //     = tokio::sync::mpsc::unbounded_channel();
     // Create thread for decoder_1
     tokio::spawn(async move {
         loop {
@@ -102,7 +102,8 @@ fn setup_socket_threads(
                     eprintln!("End of file. Leaving reader thread");
                     break
                 },
-                Some(Ok(p)) => {
+                Some(Ok(mut p)) => {
+                    p.stream_id = decoder_1.id_to_stream.get(&p.stream_id).unwrap().content as u32;
                     if let Err(_) = sender_1.send(p) {
                         println!("receiver dropped");
                         return;
@@ -113,27 +114,27 @@ fn setup_socket_threads(
         }
     });
 
-    // create listener thread to collate packet messages
-    tokio::spawn(async move {
-        loop {
-            match receiver_0.recv().await {
-                Some(p) => {
-                    if let Err(_) = sender_main.send(p) {
-                        println!("receiver dropped");
-                        return;
-                    }
-                }
-                _ => {}
-            }
-            match receiver_1.recv().await {
-                Some(p) => {
-                    if let Err(_) = sender_main.send(p) {
-                        println!("receiver dropped");
-                        return;
-                    }
-                }
-                _ => {}
-            }
-        }
-    });
+    // // create listener thread to collate packet messages
+    // tokio::spawn(async move {
+    //     loop {
+    //         match receiver_0.recv().await {
+    //             Some(p) => {
+    //                 if let Err(_) = sender_main.send(p) {
+    //                     println!("receiver dropped");
+    //                     return;
+    //                 }
+    //             }
+    //             _ => {}
+    //         }
+    //         match receiver_1.recv().await {
+    //             Some(p) => {
+    //                 if let Err(_) = sender_main.send(p) {
+    //                     println!("receiver dropped");
+    //                     return;
+    //                 }
+    //             }
+    //             _ => {}
+    //         }
+    //     }
+    // });
 }

@@ -18,6 +18,10 @@ crossbeam-utils = "0.8.11"
 nalgebra = "0.31.1"
 byteorder = "1.4.3"
 tokio = { version = "1.21.1", features = ["full"] }
+num-traits = "0.2.15"
+num-derive = "0.3.3"
+async-scoped = { version = "0.7.0", features = ["use-tokio"] }
+async-trait = "0.1.57"
 
 
 [dependencies.cv-convert]

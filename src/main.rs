@@ -58,7 +58,8 @@ pub struct Args {
 }
 
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     let mut args: Args = Args::parse();
     if !args.args_filename.is_empty() {
         let content = std::fs::read_to_string(args.args_filename)?;
@@ -78,12 +79,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         Compression::None,
         346,
         260,
-    );
+    ).await;
     let mut last_time = Instant::now();
     let first_time = last_time;
     let mut frame_count = 0;
     loop {
-        match reconstructor.next() {
+        match reconstructor.next().await {
             None => {
                 println!("\nFinished!");
                 break;
