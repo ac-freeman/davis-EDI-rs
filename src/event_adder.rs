@@ -360,8 +360,6 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
     if let Some(blur_info) = &event_adder.blur_info {
 
 
-
-
         // The beginning time for interval 0. Probably before the blurred image exposure beginning time
         let interval_beginning_start =
             ((blur_info.exposure_begin_t) / event_adder.interval_t) * event_adder.interval_t;
@@ -459,7 +457,6 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
     }
 }
 
-
 fn event_polarity_float(event: &Event) -> f64 {
     match event.on() {
         true => 1.0,
@@ -467,10 +464,7 @@ fn event_polarity_float(event: &Event) -> f64 {
     }
 }
 
-
 use opencv::imgproc::{sobel, THRESH_BINARY, threshold};
-
-
 pub struct BlurInfo {
     pub blurred_image: OMatrix<f64, Dynamic, Dynamic>,
     exposure_begin_t: i64,

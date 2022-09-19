@@ -6,20 +6,16 @@ use opencv::core::{
     NORM_MINMAX,
 };
 use opencv::highgui;
-use opencv::imgproc::{blur, resize};
+use opencv::imgproc::{resize};
 use std::collections::VecDeque;
 use std::{io, mem};
 use std::io::{Write};
 use std::path::Path;
-use std::thread::sleep;
-use std::time::{Duration, Instant};
+use std::time::{Instant};
 use simple_error::SimpleError;
-use crossbeam_utils::thread;
 use nalgebra::DMatrix;
 use cv_convert::TryFromCv;
-use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
-use async_scoped::TokioScope;
 use crate::threaded_decoder::{PacketReceiver, setup_packet_threads};
 
 #[derive(Default)]
@@ -330,7 +326,6 @@ async fn fill_packet_queue_to_frame(
             }
             // Some(Err(e)) => panic!("{}", e),
             None => return Err(SimpleError::new("End of aedat file")),
-            _ => {}
         }
     };
 
@@ -347,152 +342,6 @@ async fn fill_packet_queue_to_frame(
     // }
 
     Ok(blur_info)
-}
-
-fn fill_packet_queue_to_frame_from_file(
-    aedat_decoder_0: &mut Decoder,
-    packet_queue: &mut VecDeque<Packet>,
-    height: i32,
-    width: i32) -> Result<BlurInfo, SimpleError> {
-    let blur_info = loop {
-        match aedat_decoder_0.next() {
-            Some(Ok(p)) => {
-                if matches!(aedat_decoder_0.id_to_stream.get(&p.stream_id).unwrap().content, StreamContent::Frame) {
-                    let frame =
-                        match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer) {
-                            Ok(result) => result,
-                            Err(_) => {
-                                panic!("the packet does not have a size prefix");
-                            }
-                        };
-
-                    let frame_px = frame.pixels().unwrap();
-                    let mut image = DMatrix::<f64>::zeros(height as usize, width as usize);
-                    for (row_idx, mut im_row) in image.row_iter_mut().enumerate() {
-                        for (col_idx, im_px) in im_row.iter_mut().enumerate() {
-                            *im_px = frame_px[row_idx * width as usize + col_idx] as f64 / 255.0;
-                        }
-                    }
-
-                    // TODO: TMP
-                    // let tmp_blurred_mat = Mat::try_from_cv(&image).unwrap();
-                    // _show_display_force("blurred input", &tmp_blurred_mat, 1, false);
-
-                    let blur_info = BlurInfo::new(
-                        image,
-                        frame.exposure_begin_t(),
-                        frame.exposure_end_t(),
-                    );
-
-                    break blur_info
-                } else if matches!(aedat_decoder_0.id_to_stream.get(&p.stream_id).unwrap().content, StreamContent::Events) {
-                    packet_queue.push_back(p);
-                }
-            }
-            Some(Err(e)) => panic!("{}", e),
-            None => return Err(SimpleError::new("End of aedat file"))
-        }
-    };
-
-    // match aedat_decoder_0.next() {
-    //     Some(Ok(p)) => {
-    //         if matches!(aedat_decoder_0.id_to_stream.get(&p.stream_id).unwrap().content, aedat::base::StreamContent::Events) {
-    //             packet_queue.push_back(p);
-    //         } else {
-    //             panic!("TODO handle sparse events")
-    //         }
-    //     },
-    //     Some(Err(e)) => panic!("{}", e),
-    //     None => return Err(SimpleError::new("End of aedat file"))
-    // }
-
-    Ok(blur_info)
-
-
-}
-
-
-//decoder_0 is for events, decoder_1 is for frames
-fn fill_packet_queue_to_frame_from_socket(
-    aedat_decoder_0: &mut Decoder,
-    aedat_decoder_1: &mut Decoder,
-    packet_queue: &mut VecDeque<Packet>,
-    height: i32,
-    width: i32) -> Result<BlurInfo, SimpleError> {
-
-    // first, get the next frame
-    let blur_info = match aedat_decoder_1.next() {
-        Some(Ok(p)) => {
-            if matches!(aedat_decoder_1.id_to_stream.get(&p.stream_id).unwrap().content, StreamContent::Frame) {
-                let frame =
-                    match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer) {
-                        Ok(result) => result,
-                        Err(_) => {
-                            panic!("the packet does not have a size prefix");
-                        }
-                    };
-
-                let frame_px = frame.pixels().unwrap();
-                let mut image = DMatrix::<f64>::zeros(height as usize, width as usize);
-                for (row_idx, mut im_row) in image.row_iter_mut().enumerate() {
-                    for (col_idx, im_px) in im_row.iter_mut().enumerate() {
-                        *im_px = frame_px[row_idx * width as usize + col_idx] as f64 / 255.0;
-                    }
-                }
-
-                // TODO: TMP
-                let tmp_blurred_mat = Mat::try_from_cv(&image).unwrap();
-                _show_display_force("blurred input", &tmp_blurred_mat, 1, false);
-
-                let blur_info = BlurInfo::new(
-                    image,
-                    frame.exposure_begin_t(),
-                    frame.exposure_end_t(),
-                );
-
-                blur_info
-            } else {
-                panic!("invalid frame packet")
-            }
-        }
-        Some(Err(e)) => panic!("{}", e),
-        None => return Err(SimpleError::new("End of socket"))
-    };
-
-    // Then, get the events corresponding to this frame
-    loop {
-        match aedat_decoder_0.next() {
-            Some(Ok(p)) => {
-                if matches!(aedat_decoder_0.id_to_stream.get(&p.stream_id).unwrap().content, StreamContent::Events) {
-                    let done = {
-                        let event_packet =
-                            match aedat::events_generated::size_prefixed_root_as_event_packet(&p.buffer) {
-                                Ok(result) => result,
-                                Err(_) => {
-                                    panic!("the packet does not have a size prefix");
-                                }
-                            };
-
-                        let event_arr = match event_packet.elements() {
-                            None => panic!("No events in packet"),
-                            Some(events) => events,
-                        };
-                        event_arr.last().unwrap().t() > blur_info.exposure_end_t
-                    };
-                    packet_queue.push_back(p);
-                    if done {
-                        break
-                    }
-
-                }
-            }
-            Some(Err(e)) => panic!("{}", e),
-            None => return Err(SimpleError::new("End of socket"))
-        }
-    }
-
-    Ok(blur_info)
-
 }
 
 #[derive(Debug)]

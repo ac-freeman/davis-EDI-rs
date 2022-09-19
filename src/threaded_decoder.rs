@@ -1,10 +1,5 @@
-use std::future::Future;
-use std::thread;
-use aedat::base::{Decoder, Packet, ParseError};
-use crossbeam::channel::bounded;
+use aedat::base::{Decoder, Packet};
 use tokio::sync::mpsc::{UnboundedReceiver, Receiver};
-use num_derive::FromPrimitive;
-use num_traits::FromPrimitive;
 
 pub(crate) struct PacketReceiver {
     bounded_receiver: Option<Receiver<Packet>>,
