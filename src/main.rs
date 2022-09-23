@@ -119,7 +119,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     let k =  show_display("RETURNED", &image, 1, &reconstructor);
                     if k != -1
                     {
-                        println!("Exiting by keystroke k={}",k);
+                        println!("\nExiting by keystroke k={}",k);
                         break
                     };
 
@@ -147,7 +147,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     drop(video_writer);
 
     // ffmpeg -f rawvideo -pix_fmt gray -s:v 346x260 -r 60 -i ./tmp.gray8 -crf 0 -c:v libx264 ./output_file.mp4
-
+    println!("Writing reconstruction as .mp4 with ffmpeg")
     Command::new("ffmpeg")
         .args(&["-f", "rawvideo", "-pix_fmt", "gray", "-s:v", "346x260", "-r", "30", "-i", "./tmp.gray8", "-crf", "0", "-c:v", "libx264", "-y", "./output_file.mp4"])
         .output()
