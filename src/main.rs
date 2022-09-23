@@ -3,10 +3,18 @@ use aedat::base::ioheader_generated::Compression;
 use clap::Parser;
 use std::error::Error;
 use std::time::Instant;
+use cv_convert::IntoCv;
+use nalgebra::{DMatrix, Dynamic, OMatrix, U2, U3};
+use opencv::core::{CV_8U, Mat, MatTraitConst, MatTraitConstManual, Size};
+use opencv::hub_prelude::VideoWriterTrait;
+use opencv::videoio::VideoWriter;
 
 use crate::reconstructor::show_display;
 use crate::reconstructor::Reconstructor;
 use serde::Deserialize;
+use tokio::fs::File;
+use tokio::io::{AsyncWriteExt, BufWriter};
+use tokio::process::Command;
 
 mod event_adder;
 mod reconstructor;
@@ -83,6 +91,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut last_time = Instant::now();
     let first_time = last_time;
     let mut frame_count = 0;
+    let mut video_writer = BufWriter::new(File::create("./tmp.gray8").await.unwrap());
+    let mut image_8u = Mat::default();
     loop {
         match reconstructor.next().await {
             None => {
@@ -98,12 +108,31 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     }
                 };
 
+
+                image.clone().convert_to(&mut image_8u, CV_8U, 255.0, 0.0).unwrap();
+
                 // Don't refresh the window more than 60 Hz
                 if (Instant::now() - last_time).as_millis() > args.output_fps as u128 / 60 {
                     last_time = Instant::now();
                     // Iterate through images by pressing a key on keyboard. To iterate automatically,
-                    // change `wait` to 1
-                    show_display("RETURNED", &image, 1, &reconstructor);
+                    // change `wait` to 1. Break out of loop if user presses a key on keyboard
+                    let k =  show_display("RETURNED", &image, 1, &reconstructor);
+                    if k != -1
+                    {
+                        println!("Exiting by keystroke k={}",k);
+                        break
+                    };
+
+                }
+
+                unsafe {
+                    for idx in 0..(reconstructor.height * reconstructor.width) as i32{
+
+                        let val: *const u8 = image_8u.at_unchecked(idx).unwrap() as *const u8;
+                        video_writer.write(
+                            std::slice::from_raw_parts(val, 1)
+                        ).await.unwrap();
+                    }
                 }
             }
         }
@@ -114,5 +143,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         (Instant::now() - first_time).as_secs(),
         frame_count as f32 / (Instant::now() - first_time).as_secs_f32()
     );
+    video_writer.flush().await.unwrap();
+    drop(video_writer);
+
+    // ffmpeg -f rawvideo -pix_fmt gray -s:v 346x260 -r 60 -i ./tmp.gray8 -crf 0 -c:v libx264 ./output_file.mp4
+
+    Command::new("ffmpeg")
+        .args(&["-f", "rawvideo", "-pix_fmt", "gray", "-s:v", "346x260", "-r", "30", "-i", "./tmp.gray8", "-crf", "0", "-c:v", "libx264", "-y", "./output_file.mp4"])
+        .output()
+        .await.expect("failed to execute process");
     Ok(())
 }

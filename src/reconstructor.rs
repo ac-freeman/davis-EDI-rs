@@ -30,8 +30,8 @@ pub struct Reconstructor {
     show_display: bool,
     show_blurred_display: bool,
     packet_receiver: PacketReceiver,
-    height: usize,
-    width: usize,
+    pub(crate) height: usize,
+    pub(crate) width: usize,
     packet_queue: VecDeque<Packet>,
     event_adder: EventAdder,
     latent_image_queue: VecDeque<Mat>,
@@ -442,7 +442,7 @@ fn split_camera_info(stream: &Stream) -> (u16, u16) {
 }
 
 /// If [`MyArgs`]`.show_display`, shows the given [`Mat`] in an OpenCV window
-pub fn show_display(window_name: &str, mat: &Mat, wait: i32, reconstructor: &Reconstructor) {
+pub fn show_display(window_name: &str, mat: &Mat, wait: i32, reconstructor: &Reconstructor) -> i32 {
     if reconstructor.show_display {
         let mut tmp = Mat::default();
 
@@ -464,8 +464,9 @@ pub fn show_display(window_name: &str, mat: &Mat, wait: i32, reconstructor: &Rec
         } else {
             highgui::imshow(window_name, mat).unwrap();
         }
-        highgui::wait_key(wait).unwrap();
+        return highgui::wait_key(wait).unwrap()
     }
+    -1
 }
 
 /// TODO: Remove. Just for debugging.

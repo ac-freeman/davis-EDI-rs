@@ -2,10 +2,7 @@ use aedat::base::Packet;
 use aedat::events_generated::Event;
 use cv_convert::TryFromCv;
 use nalgebra::{DMatrix, Dynamic, OMatrix};
-use opencv::core::{
-    mean, no_array, normalize, sqrt, sum_elems, ElemMul, Mat, MatExprTraitConst, BORDER_DEFAULT,
-    CV_64F, NORM_MINMAX,
-};
+use opencv::core::{mean, no_array, normalize, sqrt, sum_elems, ElemMul, Mat, MatExprTraitConst, BORDER_DEFAULT, CV_64F, NORM_MINMAX, create_continuous};
 use std::mem;
 use std::ops::{AddAssign, DivAssign, MulAssign};
 
@@ -55,6 +52,9 @@ impl EventAdder {
         start_c: f64,
         optimize_c: bool,
     ) -> EventAdder {
+
+        let mut continuous_mat = Mat::default();
+        create_continuous(height as i32, width as i32, CV_64F, &mut continuous_mat).unwrap();
         EventAdder {
             interval_t: output_frame_length,
             event_before_queue: Vec::new(),
@@ -63,10 +63,7 @@ impl EventAdder {
             height: height as i32,
             width: width as i32,
             last_interval_start_timestamp: 0,
-            latent_image: Mat::zeros(height as i32, width as i32, CV_64F)
-                .unwrap()
-                .to_mat()
-                .unwrap(),
+            latent_image: continuous_mat,
             blur_info: None,
             next_blur_info: Default::default(),
             current_c: start_c,
