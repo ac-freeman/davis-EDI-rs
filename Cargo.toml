@@ -2,8 +2,14 @@
 name = "davis-edi-rs"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors = ["Andrew C. Freeman"]
+description = "A fast, Rust-based, open-source implementation of the paper \"Bringing a Blurry Frame Alive at High Frame-Rate with an Event Camera\" (2019) by Pan et al."
+homepage = "https://github.com/ac-freeman/davis-EDI-rs"
+repository = "https://github.com/ac-freeman/davis-EDI-rs"
+readme = "README.md"
+license-file = "LICENSE"
+keywords = ["neuromorphic", "decoding", "davis", "dvs", "aedat"]
+categories = ["multimedia::encoding", "science"]
 
 [dependencies]
 opencv = "0.66.0"
