@@ -37,7 +37,7 @@
             <attr key="maxDataBacklog" type="int">5</attr>
             <attr key="moduleLibrary" type="string">dv_output_net_tcp_server</attr>
             <attr key="portNumber" type="int">46847</attr>
-            <attr key="running" type="bool">true</attr>
+            <attr key="running" type="bool">false</attr>
             <attr key="timeout" type="long">0</attr>
             <node name="inputs" path="/mainloop/_visualizer_capture___events_0/inputs/">
                 <node name="output0" path="/mainloop/_visualizer_capture___events_0/inputs/output0/">
@@ -56,7 +56,7 @@
             <attr key="maxDataBacklog" type="int">5</attr>
             <attr key="moduleLibrary" type="string">dv_output_net_tcp_server</attr>
             <attr key="portNumber" type="int">44565</attr>
-            <attr key="running" type="bool">true</attr>
+            <attr key="running" type="bool">false</attr>
             <attr key="timeout" type="long">0</attr>
             <node name="inputs" path="/mainloop/_visualizer_capture___frames_0/inputs/">
                 <node name="output0" path="/mainloop/_visualizer_capture___frames_0/inputs/output0/">
@@ -75,7 +75,7 @@
             <attr key="maxDataBacklog" type="int">5</attr>
             <attr key="moduleLibrary" type="string">dv_output_net_tcp_server</attr>
             <attr key="portNumber" type="int">41053</attr>
-            <attr key="running" type="bool">true</attr>
+            <attr key="running" type="bool">false</attr>
             <attr key="timeout" type="long">0</attr>
             <node name="inputs" path="/mainloop/_visualizer_capture___imu_0/inputs/">
                 <node name="output0" path="/mainloop/_visualizer_capture___imu_0/inputs/output0/">
@@ -91,7 +91,7 @@
             <attr key="devAddress" type="int">0</attr>
             <attr key="logLevel" type="string">WARNING</attr>
             <attr key="moduleLibrary" type="string">dv_davis</attr>
-            <attr key="running" type="bool">true</attr>
+            <attr key="running" type="bool">false</attr>
             <attr key="serialNumber" type="string"/>
             <node name="DAVIS346" path="/mainloop/capture/DAVIS346/">
                 <node name="bias" path="/mainloop/capture/DAVIS346/bias/">
@@ -463,7 +463,7 @@
             </node>
         </node>
         <node name="output_net_socket" path="/mainloop/output_net_socket/">
-            <attr key="_guiSupport" type="string">{"boxX":700.0,"boxY":300.0}</attr>
+            <attr key="_guiSupport" type="string">{"boxX":550.0,"boxY":300.0}</attr>
             <attr key="_priorityAttributes" type="string">compression,socketPath</attr>
             <attr key="compression" type="string">NONE</attr>
             <attr key="logLevel" type="string">INFO</attr>
@@ -481,7 +481,7 @@
             </node>
         </node>
         <node name="output_net_socket_2" path="/mainloop/output_net_socket_2/">
-            <attr key="_guiSupport" type="string">{"boxX":950.0,"boxY":300.0}</attr>
+            <attr key="_guiSupport" type="string">{"boxX":800.0,"boxY":300.0}</attr>
             <attr key="_priorityAttributes" type="string">compression,socketPath</attr>
             <attr key="compression" type="string">NONE</attr>
             <attr key="logLevel" type="string">INFO</attr>
@@ -494,6 +494,22 @@
             <attr key="timeout" type="long">0</attr>
             <node name="inputs" path="/mainloop/output_net_socket_2/inputs/">
                 <node name="output0" path="/mainloop/output_net_socket_2/inputs/output0/">
+                    <attr key="from" type="string">capture[frames]</attr>
+                </node>
+            </node>
+        </node>
+        <node name="video_output" path="/mainloop/video_output/">
+            <attr key="_guiSupport" type="string">{"boxX":750.0,"boxY":550.0}</attr>
+            <attr key="_priorityAttributes" type="string">codec,fileName,fps,writtenFramesCount</attr>
+            <attr key="codec" type="string">FFV1_[ffv1]</attr>
+            <attr key="codecOptions" type="string"/>
+            <attr key="fileName" type="string">/home/andrew/Documents/DynamicVision/frames.mkv</attr>
+            <attr key="fps" type="int">3</attr>
+            <attr key="logLevel" type="string">INFO</attr>
+            <attr key="moduleLibrary" type="string">dv_video_output</attr>
+            <attr key="running" type="bool">false</attr>
+            <node name="inputs" path="/mainloop/video_output/inputs/">
+                <node name="frames" path="/mainloop/video_output/inputs/frames/">
                     <attr key="from" type="string">capture[frames]</attr>
                 </node>
             </node>
