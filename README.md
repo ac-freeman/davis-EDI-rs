@@ -1,6 +1,8 @@
 # davis-EDI-rs
 A fast, Rust-based, open-source implementation of the paper "Bringing a Blurry Frame Alive at High Frame-Rate with an Event Camera" (2019) by Pan et al.
 
+![](https://github.com/ac-freeman/davis-EDI-rs/blob/main/output.gif) ![](https://github.com/ac-freeman/davis-EDI-rs/blob/main/output_recon.gif)
+
 ## About
 This project aims to elucidate the paper above and move towards real-time software systems which take advantage of synthesized event and frame data. The original paper's [code](https://github.com/panpanfei/Bringing-a-Blurry-Frame-Alive-at-High-Frame-Rate-with-an-Event-Camera) is largely obfuscated, making it impossible to make improvements. Furthermore, the original code base is written in MATLAB, making it relatively slow, and it uses a converted MATLAB data format for the DAVIS files. 
 
@@ -16,14 +18,13 @@ There are some major things left before I can start implementing mEDI. Any assis
 - [ ] Make it more Rusty (follow conventions)
 - [x] Fix the contrast threshold optimization
   - Special thanks to [Chen Song](https://github.com/chensong1995) for his assistance with this
-- [ ] Add reconstruction from a live camera
-- [ ] Create a controller for when to perform c-value optimization, based on the desired reconstructed frame rate, for real-time applications
-- [ ] Be able to save reconstructed frames as a video easily
+- [x] Add reconstruction from a live camera
+- [x] Create a controller for when to perform c-value optimization, based on the desired reconstructed frame rate, for real-time applications
+  - Needs improvement, however
+- [x] Be able to save reconstructed frames as a video easily
 
 ## Requirements
 - Rust 2021 or higher
 - Cargo
 - OpenCV and its Rust bindings (installation instructions [here](https://github.com/twistedfall/opencv-rust))
 - Other dependencies will download and install automatically when building with Cargo
-
-![](https://github.com/ac-freeman/davis-EDI-rs/blob/main/demo.gif)
