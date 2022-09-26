@@ -8,7 +8,7 @@ This project aims to elucidate the paper above and move towards real-time softwa
 
 This implementation operates on .aedat4 files generated directly by an [iniVation](https://inivation.com/) DAVIS camera. This removes a lot of the headache with getting started, and allows you to easily run the program on extremely large files (that is, long recordings), and down the line should be able to easily process a live camera feed in real time as well. If we're going to move towards practical systems with event cameras, we need practical processing! I've included a sample file recorded with my camera.
 
-I did my best to understand and implement the mathematics presented in the original paper, while taking a few liberties for the sake of speed gains. At present, this project only implements the **_Event-based Double Integral_** from the [2019 paper](https://openaccess.thecvf.com/content_CVPR_2019/papers/Pan_Bringing_a_Blurry_Frame_Alive_at_High_Frame-Rate_With_an_CVPR_2019_paper.pdf), **not** the *multiple Event-based Double Integral* from the [2020 paper](https://ieeexplore.ieee.org/abstract/document/9252186). I plan to implement that method when some important remaining work is completed (see below).
+I did my best to understand and implement the mathematics presented in the original paper, while taking a few liberties for the sake of speed gains. At present, this project only implements the **_Event-based Double Integral_** from the [2019 paper](https://openaccess.thecvf.com/content_CVPR_2019/papers/Pan_Bringing_a_Blurry_Frame_Alive_at_High_Frame-Rate_With_an_CVPR_2019_paper.pdf), **not** the *multiple Event-based Double Integral* from the [2020 paper](https://ieeexplore.ieee.org/abstract/document/9252186).
 
 ## Usage
 Since there are a lot of command-line arguments available, my preferred method of serving them is in a file. Refer to [`Args.toml`](Args.toml) for an example.
@@ -17,7 +17,7 @@ Since there are a lot of command-line arguments available, my preferred method o
 You can deblur a pre-existing file by providing the directory of the file in `--base-path`, the file name in `--event-filename-0`, and `--mode` to "file".
 
 ### Deblur from a live camera feed
-You can also deblur the data coming straight from a camera, in real time! I've provided the [config file](`sockets.xml`) for iniVation's DV software which lets you publish the APS frames and event packets to two Unix sockets. For this approach, you should set `--base-path` to "/tmp", `--event-filename-0` to the name of the _events_ socket, `--event-filename-1` to the name of the _frames_ socket, and `--mode` to "socket". This should work pretty much the same way for a TCP connection, but additional configuration may be required.
+You can also deblur the data coming straight from a camera, in real time! I've provided the [config file](dataset/dv_sockets.xml) for iniVation's DV software which lets you publish the APS frames and event packets to two Unix sockets. For this approach, you should set `--base-path` to "/tmp", `--event-filename-0` to the name of the _events_ socket, `--event-filename-1` to the name of the _frames_ socket, and `--mode` to "socket". This should work pretty much the same way for a TCP connection, but additional configuration may be required.
 
 ### Other parameters
 `--output-fps`: The reconstruction output frame rate. Increasing this parameter has a marginal effect on the processing speed.
