@@ -6,12 +6,14 @@ A fast, Rust-based, open-source implementation of the paper "Bringing a Blurry F
 ## About
 This project aims to elucidate the paper above and move towards real-time software systems which take advantage of synthesized event and frame data. The original paper's [code](https://github.com/panpanfei/Bringing-a-Blurry-Frame-Alive-at-High-Frame-Rate-with-an-Event-Camera) is largely obfuscated, making it impossible to make improvements. Furthermore, the original code base is written in MATLAB, making it relatively slow, and it uses a converted MATLAB data format for the DAVIS files. 
 
-This implementation operates on .aedat4 files generated directly by an [iniVation](https://inivation.com/) DAVIS camera. This removes a lot of the headache with getting started, and allows you to easily run the program on extremely large files (that is, long recordings), and down the line should be able to easily process a live camera feed in real time as well. If we're going to move towards practical systems with event cameras, we need practical processing! I've included a sample file recorded with my camera.
+This implementation operates on .aedat4 files generated directly by an [iniVation](https://inivation.com/) DAVIS camera _and_ a live feed from a DAVIS camera. If we're going to move towards practical systems with event cameras, we need practical processing! I've included a sample file recorded with my camera.
 
 I did my best to understand and implement the mathematics presented in the original paper, while taking a few liberties for the sake of speed gains. At present, this project only implements the **_Event-based Double Integral_** from the [2019 paper](https://openaccess.thecvf.com/content_CVPR_2019/papers/Pan_Bringing_a_Blurry_Frame_Alive_at_High_Frame-Rate_With_an_CVPR_2019_paper.pdf), **not** the *multiple Event-based Double Integral* from the [2020 paper](https://ieeexplore.ieee.org/abstract/document/9252186).
 
 ## Usage
-Since there are a lot of command-line arguments available, my preferred method of serving them is in a file. Refer to [`Args.toml`](Args.toml) for an example.
+Since there are a lot of command-line arguments available, my preferred method of serving them is in a file. Refer to [`Args.toml`](Args.toml) for an example. You can give it a run by cloning this repository and executing:
+
+`cargo run --release -- --args-filename "./Args.toml"`
 
 ### Deblur from an .aedat4 file
 You can deblur a pre-existing file by providing the directory of the file in `--base-path`, the file name in `--event-filename-0`, and `--mode` to "file".
