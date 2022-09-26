@@ -17,7 +17,7 @@ Since there are a lot of command-line arguments available, my preferred method o
 You can deblur a pre-existing file by providing the directory of the file in `--base-path`, the file name in `--event-filename-0`, and `--mode` to "file".
 
 ### Deblur from a live camera feed
-You can also deblur the data coming straight from a camera, in real time! I've provided the [config file](`sockets.xml`) for iniVation's DV software which lets you publish the APS frames and event packets to two Unix sockets. For this approach, you should set `--base-path` to "/tmp", `--event-filename-0` to the name of the _events_ socket, `--event-filename-1` to the name of the _frames_ socket, and `--mode` to "socket". This should work pretty much the same way for a TCP connection, but additional configuration may be required.
+You can also deblur the data coming straight from a camera, in real time! I've provided the [config file](dataset/dv_sockets.xml) for iniVation's DV software which lets you publish the APS frames and event packets to two Unix sockets. For this approach, you should set `--base-path` to "/tmp", `--event-filename-0` to the name of the _events_ socket, `--event-filename-1` to the name of the _frames_ socket, and `--mode` to "socket". This should work pretty much the same way for a TCP connection, but additional configuration may be required.
 
 ### Other parameters
 `--output-fps`: The reconstruction output frame rate. Increasing this parameter has a marginal effect on the processing speed.
