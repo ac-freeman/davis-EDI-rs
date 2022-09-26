@@ -28,6 +28,8 @@ You can also deblur the data coming straight from a camera, in real time! I've p
 
 `--optimize-c`: If true, will dynamically choose the optimal contrast threshold for deblurring each frame. Causes a significant slow down, especially for higher frame-rate inputs, and can make the reconstruction perform slightly less than real time. If false, then the `--start-c` value provided will be the contrast threshold used for deblurring all frames.
 
+`--optimize-controller`: If true, will attempt to maintain real-time reconstruction performance. The controller dynamically toggles whether contrast threshold optimization is performed (unless `--optimize-c` is false), and adjusts the reconstruction frame rate. If false, will maintain a constant reconstruction frame rate, but may fall behind real-time performance. The reconstructed video files will be much smoother with this disabled. If the scene dynamics won't change much, and you have the ability to dial in settings ahead of time, it's best to keep this disabled and find (through trail and error) the optimal `--output-fps` value which maintains good performance.
+
 ## To-do list
 There are some major things left before I can start implementing mEDI. Any assistance from the community would be greatly appreciated
 
