@@ -51,6 +51,13 @@ pub struct Args {
     #[clap(long, default_value_t = 1)]
     pub(crate) optimize_c: i32,
 
+    /// Enable the optimization controller? (0=no, 1=yes)
+    /// If no, then the system will maintain a constant reconstruction frame rate, and may fall
+    /// behind real time. If yes, then the controller will adjust the reconstruction rate and
+    /// c optimization frequency to try to maintain real-time performance.
+    #[clap(long, default_value_t = 1)]
+    pub(crate) optimize_controller: i32,
+
     /// Show live view display? (0=no, 1=yes)
     #[clap(short, long, default_value_t = 1)]
     pub(crate) show_display: i32,
@@ -84,6 +91,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         args.mode,
         args.start_c,
         args.optimize_c != 0,
+        args.optimize_controller != 0,
         args.show_display != 0,
         args.show_blurred_display != 0,
         args.output_fps,
