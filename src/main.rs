@@ -63,6 +63,10 @@ pub struct Args {
     /// i.e., 1000000 ticks per second. Then each output frame will constitute 1000000/[FPS] ticks
     #[clap(short, long, default_value_t = 100.0)]
     pub(crate) output_fps: f64,
+
+    /// Write out framed video reconstruction? (0=no, 1=yes)
+    #[clap(long, default_value_t = 0)]
+    pub(crate) write_video: i32,
 }
 
 #[tokio::main]
@@ -93,6 +97,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut frame_count = 0;
     let mut video_writer = BufWriter::new(File::create("./tmp.gray8").await.unwrap());
     let mut image_8u = Mat::default();
+    let write_video = args.write_video != 0;
     loop {
         match reconstructor.next().await {
             None => {
@@ -125,13 +130,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                 }
 
-                unsafe {
-                    for idx in 0..(reconstructor.height * reconstructor.width) as i32{
-
-                        let val: *const u8 = image_8u.at_unchecked(idx).unwrap() as *const u8;
-                        video_writer.write(
-                            std::slice::from_raw_parts(val, 1)
-                        ).await.unwrap();
+                if write_video {
+                    unsafe {
+                        for idx in 0..(reconstructor.height * reconstructor.width) as i32 {
+                            let val: *const u8 = image_8u.at_unchecked(idx).unwrap() as *const u8;
+                            video_writer.write(
+                                std::slice::from_raw_parts(val, 1)
+                            ).await.unwrap();
+                        }
                     }
                 }
             }
@@ -146,11 +152,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     video_writer.flush().await.unwrap();
     drop(video_writer);
 
-    // ffmpeg -f rawvideo -pix_fmt gray -s:v 346x260 -r 60 -i ./tmp.gray8 -crf 0 -c:v libx264 ./output_file.mp4
-    println!("Writing reconstruction as .mp4 with ffmpeg");
-    Command::new("ffmpeg")
-        .args(&["-f", "rawvideo", "-pix_fmt", "gray", "-s:v", "346x260", "-r", "30", "-i", "./tmp.gray8", "-crf", "0", "-c:v", "libx264", "-y", "./output_file.mp4"])
-        .output()
-        .await.expect("failed to execute process");
+    if write_video {
+        // ffmpeg -f rawvideo -pix_fmt gray -s:v 346x260 -r 60 -i ./tmp.gray8 -crf 0 -c:v libx264 ./output_file.mp4
+        println!("Writing reconstruction as .mp4 with ffmpeg");
+        Command::new("ffmpeg")
+            .args(&["-f", "rawvideo", "-pix_fmt", "gray", "-s:v", "346x260", "-r", "30", "-i", "./tmp.gray8", "-crf", "0", "-c:v", "libx264", "-y", "./output_file.mp4"])
+            .output()
+            .await.expect("failed to execute process");
+    }
     Ok(())
 }

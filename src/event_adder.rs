@@ -216,7 +216,7 @@ impl EventAdder {
         // dbg!(phi_tv);
 
         // dbg!(phi);
-        0.14 * phi_tv - phi_edge
+        0.15 * phi_tv - phi_edge
     }
 
     fn get_gradient_and_edges(&self, image: Mat) -> (Mat, Mat) {
