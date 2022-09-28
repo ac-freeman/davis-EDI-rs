@@ -9,16 +9,11 @@ use opencv::core::{CV_8U, Mat, MatTraitConst, MatTraitConstManual, Size};
 use opencv::hub_prelude::VideoWriterTrait;
 use opencv::videoio::VideoWriter;
 
-use crate::reconstructor::show_display;
-use crate::reconstructor::Reconstructor;
+use davis_edi_rs::util::reconstructor::{Reconstructor, show_display};
 use serde::Deserialize;
 use tokio::fs::File;
 use tokio::io::{AsyncWriteExt, BufWriter};
 use tokio::process::Command;
-
-mod event_adder;
-mod reconstructor;
-mod threaded_decoder;
 
 #[derive(Parser, Debug, Deserialize, Default)]
 pub struct Args {

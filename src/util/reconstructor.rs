@@ -1,9 +1,9 @@
-use crate::event_adder::{deblur_image, BlurInfo, EventAdder};
+use crate::util::event_adder::{deblur_image, BlurInfo, EventAdder};
 use aedat::base::{
     ioheader_generated::Compression, Decoder, Packet, ParseError, Stream, StreamContent,
 };
 
-use crate::threaded_decoder::{setup_packet_threads, PacketReceiver};
+use crate::util::threaded_decoder::{setup_packet_threads, PacketReceiver};
 use cv_convert::TryFromCv;
 use nalgebra::DMatrix;
 use num_traits::FromPrimitive;
@@ -30,12 +30,12 @@ pub struct Reconstructor {
     show_display: bool,
     show_blurred_display: bool,
     packet_receiver: PacketReceiver,
-    pub(crate) height: usize,
-    pub(crate) width: usize,
+    pub height: usize,
+    pub width: usize,
     packet_queue: VecDeque<Packet>,
     event_adder: EventAdder,
     latent_image_queue: VecDeque<Mat>,
-    output_fps: f64,
+    pub output_fps: f64,
     optimize_c: bool,
     optimize_controller: bool,
 }
@@ -173,7 +173,7 @@ impl Reconstructor {
     }
 
     /// Get the next reconstructed image
-    pub(crate) async fn next(&mut self) -> Option<Result<Mat, ReconstructionError>> {
+    pub async fn next(&mut self) -> Option<Result<Mat, ReconstructionError>> {
         return match self.latent_image_queue.pop_front() {
             // If we have a queue of images already, just return the next one
             Some(image) => Some(Ok(image)),
