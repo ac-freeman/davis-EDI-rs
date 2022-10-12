@@ -55,6 +55,7 @@ impl Reconstructor {
         compression: Compression,
         mut width: u16,
         mut height: u16,
+        deblur_only: bool,
     ) -> Reconstructor {
         let mut decoder_0 = match mode.as_str() {
             "file" => {
@@ -153,6 +154,7 @@ impl Reconstructor {
                 output_frame_length,
                 start_c,
                 optimize_c,
+                deblur_only,
             ),
             latent_image_queue: Default::default(),
             output_fps,

@@ -39,6 +39,7 @@ pub struct EventAdder {
     pub(crate) next_blur_info: Option<BlurInfo>,
     pub(crate) current_c: f64,
     pub(crate) optimize_c: bool,
+    pub(crate) deblur_only: bool,
 }
 
 unsafe impl Send for EventAdder {}
@@ -51,6 +52,7 @@ impl EventAdder {
         output_frame_length: i64,
         start_c: f64,
         optimize_c: bool,
+        deblur_only: bool,
     ) -> EventAdder {
 
         let mut continuous_mat = Mat::default();
@@ -68,6 +70,7 @@ impl EventAdder {
             next_blur_info: Default::default(),
             current_c: start_c,
             optimize_c,
+            deblur_only,
         }
     }
 
@@ -430,7 +433,7 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
                 }
             }
 
-            if !event_adder.event_before_queue.is_empty() {
+            if !event_adder.deblur_only && !event_adder.event_before_queue.is_empty() {
                 intermediate_interval_start_timestamps
                     .par_iter_mut()
                     .for_each(|(timestamp_start, mat)| {

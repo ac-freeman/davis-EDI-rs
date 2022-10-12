@@ -38,6 +38,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Compression::None,
         346,
         260,
+        args.deblur_only != 0,
     )
     .await;
     let mut last_time = Instant::now();
