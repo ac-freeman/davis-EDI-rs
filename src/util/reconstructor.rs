@@ -346,7 +346,10 @@ async fn fill_packet_queue_to_frame(
                 )
             {
                 packet_queue.push_back(p);
-            } else {
+            } else if p.stream_id == 2 || p.stream_id == 3 {
+                // Do nothing
+            }
+            else {
                 panic!("TODO handle sparse events")
             }
         },

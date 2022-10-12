@@ -1,75 +1,20 @@
 // use crate::reconstructor::{show_display, Reconstructor, Reconstructors, ReconstructionError};
 use aedat::base::ioheader_generated::Compression;
 use clap::Parser;
-use std::error::Error;
-use std::time::Instant;
 use cv_convert::IntoCv;
 use nalgebra::{DMatrix, Dynamic, OMatrix, U2, U3};
-use opencv::core::{CV_8U, Mat, MatTraitConst, MatTraitConstManual, Size};
+use opencv::core::{Mat, MatTraitConst, MatTraitConstManual, Size, CV_8U};
 use opencv::hub_prelude::VideoWriterTrait;
 use opencv::videoio::VideoWriter;
+use std::error::Error;
+use std::time::Instant;
 
-use davis_edi_rs::util::reconstructor::{Reconstructor, show_display};
+use davis_edi_rs::util::reconstructor::{show_display, Reconstructor};
+use davis_edi_rs::Args;
 use serde::Deserialize;
 use tokio::fs::File;
 use tokio::io::{AsyncWriteExt, BufWriter};
 use tokio::process::Command;
-
-#[derive(Parser, Debug, Deserialize, Default)]
-pub struct Args {
-    /// Filename for args (optional; must be in .toml format)
-    #[clap(short, long, default_value = "")]
-    pub(crate) args_filename: String,
-
-    /// Input mode. Valid options are "file", "socket", and "tcp"
-    #[clap(short, long, default_value = "file")]
-    pub(crate) mode: String,
-
-    /// Directory containing the input aedat4 file
-    #[clap(short, long, default_value = "")]
-    pub(crate) base_path: String,
-
-    /// Name of the input aedat4 file
-    #[clap(long, default_value = "")]
-    pub(crate) events_filename_0: String,
-
-    /// Name of the input aedat4 file
-    #[clap(long, default_value = "")]
-    pub(crate) events_filename_1: String,
-
-    /// Starting value for c (contrast threshold)
-    #[clap(long, default_value_t = 0.3)]
-    pub(crate) start_c: f64,
-
-    /// Optimize c? (0=no, 1=yes)
-    /// If no, then the system will only use the start_c value
-    #[clap(long, default_value_t = 1)]
-    pub(crate) optimize_c: i32,
-
-    /// Enable the optimization controller? (0=no, 1=yes)
-    /// If no, then the system will maintain a constant reconstruction frame rate, and may fall
-    /// behind real time. If yes, then the controller will adjust the reconstruction rate and
-    /// c optimization frequency to try to maintain real-time performance.
-    #[clap(long, default_value_t = 1)]
-    pub(crate) optimize_controller: i32,
-
-    /// Show live view display? (0=no, 1=yes)
-    #[clap(short, long, default_value_t = 1)]
-    pub(crate) show_display: i32,
-
-    /// Show live view display for the blurry input APS images? (0=no, 1=yes)
-    #[clap(long, default_value_t = 0)]
-    pub(crate) show_blurred_display: i32,
-
-    /// Output frames per second. Assume that the input file has microsecond subdivision,
-    /// i.e., 1000000 ticks per second. Then each output frame will constitute 1000000/[FPS] ticks
-    #[clap(short, long, default_value_t = 100.0)]
-    pub(crate) output_fps: f64,
-
-    /// Write out framed video reconstruction? (0=no, 1=yes)
-    #[clap(long, default_value_t = 0)]
-    pub(crate) write_video: i32,
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -116,30 +61,31 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     }
                 };
 
-
-                image.clone().convert_to(&mut image_8u, CV_8U, 255.0, 0.0).unwrap();
+                image
+                    .clone()
+                    .convert_to(&mut image_8u, CV_8U, 255.0, 0.0)
+                    .unwrap();
 
                 // Don't refresh the window more than 60 Hz
                 if (Instant::now() - last_time).as_millis() > args.output_fps as u128 / 60 {
                     last_time = Instant::now();
                     // Iterate through images by pressing a key on keyboard. To iterate automatically,
                     // change `wait` to 1. Break out of loop if user presses a key on keyboard
-                    let k =  show_display("RETURNED", &image, 1, &reconstructor);
-                    if k != -1
-                    {
-                        println!("\nExiting by keystroke k={}",k);
-                        break
+                    let k = show_display("RETURNED", &image, 1, &reconstructor);
+                    if k != -1 {
+                        println!("\nExiting by keystroke k={}", k);
+                        break;
                     };
-
                 }
 
                 if write_video {
                     unsafe {
                         for idx in 0..(reconstructor.height * reconstructor.width) as i32 {
                             let val: *const u8 = image_8u.at_unchecked(idx).unwrap() as *const u8;
-                            video_writer.write(
-                                std::slice::from_raw_parts(val, 1)
-                            ).await.unwrap();
+                            video_writer
+                                .write(std::slice::from_raw_parts(val, 1))
+                                .await
+                                .unwrap();
                         }
                     }
                 }
@@ -159,9 +105,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // ffmpeg -f rawvideo -pix_fmt gray -s:v 346x260 -r 60 -i ./tmp.gray8 -crf 0 -c:v libx264 ./output_file.mp4
         println!("Writing reconstruction as .mp4 with ffmpeg");
         Command::new("ffmpeg")
-            .args(&["-f", "rawvideo", "-pix_fmt", "gray", "-s:v", "346x260", "-r", "30", "-i", "./tmp.gray8", "-crf", "0", "-c:v", "libx264", "-y", "./output_file.mp4"])
+            .args(&[
+                "-f",
+                "rawvideo",
+                "-pix_fmt",
+                "gray",
+                "-s:v",
+                "346x260",
+                "-r",
+                "30",
+                "-i",
+                "./tmp.gray8",
+                "-crf",
+                "0",
+                "-c:v",
+                "libx264",
+                "-y",
+                "./output_file.mp4",
+            ])
             .output()
-            .await.expect("failed to execute process");
+            .await
+            .expect("failed to execute process");
     }
     Ok(())
 }
