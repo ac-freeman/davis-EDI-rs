@@ -5,7 +5,6 @@ use nalgebra::{DMatrix, Dynamic, OMatrix};
 use opencv::core::{mean, no_array, normalize, sqrt, sum_elems, ElemMul, Mat, MatExprTraitConst, BORDER_DEFAULT, CV_64F, NORM_MINMAX, create_continuous};
 use std::mem;
 use std::ops::{AddAssign, DivAssign, MulAssign};
-
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 const FIB: [f64; 22] = [
