@@ -5,6 +5,7 @@ use nalgebra::{DMatrix, Dynamic, OMatrix};
 use opencv::core::{mean, no_array, normalize, sqrt, sum_elems, ElemMul, Mat, MatExprTraitConst, BORDER_DEFAULT, CV_64F, NORM_MINMAX, create_continuous};
 use std::mem;
 use std::ops::{AddAssign, DivAssign, MulAssign};
+use std::time::Instant;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 const FIB: [f64; 22] = [
@@ -485,14 +486,14 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
                     .0
             });
 
-        // let mut ret_vec = Vec::with_capacity(interval_start_timestamps.len());
-        // self.last_interval_start_timestamp = interval_start_timestamps.last().unwrap().0;
         let last_interval = interval_start_timestamps.last().unwrap().clone();
         for elem in interval_start_timestamps {
             ret_vec.push(elem.1)
         }
 
-        // self.latent_image = ret_vec.last().unwrap().clone();
+
+        let latency = (Instant::now() - blur_info.packet_timestamp).as_millis();
+        println!("  Latency is {}ms", latency);
 
         Some(DeblurReturn {
             last_interval_start_timestamp: last_interval.0,
@@ -512,11 +513,13 @@ fn event_polarity_float(event: &Event) -> f64 {
 }
 
 use opencv::imgproc::{sobel, threshold, THRESH_BINARY};
+
 pub struct BlurInfo {
     pub blurred_image: OMatrix<f64, Dynamic, Dynamic>,
     exposure_begin_t: i64,
     pub exposure_end_t: i64,
     pub init: bool, // TODO: not very rusty
+    pub packet_timestamp: Instant
 }
 
 impl BlurInfo {
@@ -524,12 +527,14 @@ impl BlurInfo {
         image: OMatrix<f64, Dynamic, Dynamic>,
         exposure_begin_t: i64,
         exposure_end_t: i64,
+        packet_timestamp: Instant
     ) -> BlurInfo {
         BlurInfo {
             blurred_image: image,
             exposure_begin_t,
             exposure_end_t,
             init: true,
+            packet_timestamp
         }
     }
 }

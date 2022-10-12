@@ -326,7 +326,7 @@ async fn fill_packet_queue_to_frame(
                     }
 
                     let blur_info =
-                        BlurInfo::new(image, frame.exposure_begin_t(), frame.exposure_end_t());
+                        BlurInfo::new(image, frame.exposure_begin_t(), frame.exposure_end_t(), p.timestamp);
 
                     break blur_info;
                 } else if matches!(
