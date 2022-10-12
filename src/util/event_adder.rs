@@ -425,7 +425,7 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
             let mut current_ts =
                 intermediate_interval_start_timestamps[0].0 + event_adder.interval_t;
             loop {
-                if current_ts < interval_beginning_start {
+                if current_ts < interval_beginning_start && !event_adder.deblur_only {
                     intermediate_interval_start_timestamps.push((current_ts, Mat::default()));
                     current_ts += event_adder.interval_t;
                 } else {
@@ -459,7 +459,7 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
         let mut interval_start_timestamps = vec![(interval_beginning_start, Mat::default(), 0.0)];
         let mut current_ts = interval_beginning_start + event_adder.interval_t;
         loop {
-            if current_ts <= interval_end_start {
+            if current_ts <= interval_end_start && !event_adder.deblur_only {
                 interval_start_timestamps.push((current_ts, Mat::default(), event_adder.current_c));
                 current_ts += event_adder.interval_t;
             } else {
