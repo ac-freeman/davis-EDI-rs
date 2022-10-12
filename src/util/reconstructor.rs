@@ -14,7 +14,7 @@ use simple_error::SimpleError;
 use std::collections::VecDeque;
 use std::io::Write;
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use std::{io, mem};
 
 #[derive(Default)]
@@ -38,6 +38,7 @@ pub struct Reconstructor {
     pub output_fps: f64,
     optimize_c: bool,
     optimize_controller: bool,
+    target_latency: f64
 }
 
 impl Reconstructor {
@@ -56,6 +57,7 @@ impl Reconstructor {
         mut width: u16,
         mut height: u16,
         deblur_only: bool,
+        target_latency: f64,
     ) -> Reconstructor {
         let mut decoder_0 = match mode.as_str() {
             "file" => {
@@ -159,7 +161,8 @@ impl Reconstructor {
             latent_image_queue: Default::default(),
             output_fps,
             optimize_c,
-            optimize_controller
+            optimize_controller,
+            target_latency
         };
         let blur_info = fill_packet_queue_to_frame(
             &mut r.packet_receiver,
@@ -211,12 +214,12 @@ impl Reconstructor {
                 if self.optimize_controller && ((1000000.0 / running_fps) as i64 - self.event_adder.interval_t).abs()
                     > 1000000 / 50000
                 {
-                    self.event_adder.interval_t =
-                        (1000000.0 / running_fps).max(1000000.0 / self.output_fps) as i64;
-                    print!(" Target FPS: {}", 1000000 / self.event_adder.interval_t);
-                    self.event_adder.optimize_c = false;
+                    // self.event_adder.interval_t =
+                    //     (1000000.0 / running_fps).max(1000000.0 / self.output_fps) as i64;
+                    // print!(" Target FPS: {}", 1000000 / self.event_adder.interval_t);
+                    // self.event_adder.optimize_c = false;
                 } else {
-                    self.event_adder.optimize_c = self.optimize_c;
+                    // self.event_adder.optimize_c = self.optimize_c;
                 }
                 io::stdout().flush().unwrap();
                 match self.latent_image_queue.pop_front() {
@@ -247,8 +250,6 @@ impl Reconstructor {
             }
         }
 
-        // match async_scoped::TokioScope::scope_and_block(|s| {
-        //     let join_handle = s.spawn(|_| {
         let deblur_res = {
             if self.show_blurred_display {
                 let tmp_blurred_mat =
@@ -258,7 +259,22 @@ impl Reconstructor {
             }
             deblur_image(&self.event_adder)
         };
-        // });
+
+        let latency = (Instant::now() - self.event_adder.blur_info.as_ref().unwrap().packet_timestamp).as_millis();
+        println!("  Latency is {}ms", latency);
+
+
+        match (self.optimize_controller, self.optimize_c, latency > self.target_latency as u128, self.event_adder.optimize_c) {
+            (true, true, true, true) => {
+                println!("DISABLING C-OPTIMIZATION");
+                self.event_adder.optimize_c = false;
+            }
+            (true, true, false, false) => {
+                println!("ENABLING C-OPTIMIZATION");
+                self.event_adder.optimize_c = true;
+            }
+            (_, _, _, _) => {}
+        }
 
         let next_blur_info = match fill_packet_queue_to_frame(
             &mut self.packet_receiver,
@@ -272,8 +288,6 @@ impl Reconstructor {
             Err(_) => None,
         };
 
-        // (join_handle.join().unwrap(), next_blur_info)
-        // }) {
         match (deblur_res, next_blur_info) {
             (None, _) => {
                 panic!("No images returned from deblur call")

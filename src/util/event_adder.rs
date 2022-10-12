@@ -491,10 +491,6 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
             ret_vec.push(elem.1)
         }
 
-
-        let latency = (Instant::now() - blur_info.packet_timestamp).as_millis();
-        println!("  Latency is {}ms", latency);
-
         Some(DeblurReturn {
             last_interval_start_timestamp: last_interval.0,
             ret_vec,
