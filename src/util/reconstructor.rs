@@ -1,9 +1,9 @@
 use crate::util::event_adder::{deblur_image, BlurInfo, EventAdder};
 use aedat::base::{
-    ioheader_generated::Compression, Decoder, Packet, ParseError, Stream, StreamContent,
+    ioheader_generated::Compression, Decoder, ParseError, Stream, StreamContent,
 };
 
-use crate::util::threaded_decoder::{setup_packet_threads, PacketReceiver};
+use crate::util::threaded_decoder::{setup_packet_threads, PacketReceiver, TimestampedPacket};
 use cv_convert::TryFromCv;
 use nalgebra::DMatrix;
 use num_traits::FromPrimitive;
@@ -32,7 +32,7 @@ pub struct Reconstructor {
     packet_receiver: PacketReceiver,
     pub height: usize,
     pub width: usize,
-    packet_queue: VecDeque<Packet>,
+    packet_queue: VecDeque<TimestampedPacket>,
     event_adder: EventAdder,
     latent_image_queue: VecDeque<Mat>,
     pub output_fps: f64,
@@ -118,7 +118,7 @@ impl Reconstructor {
                 .unwrap();
         }
 
-        let packet_queue: VecDeque<Packet> = VecDeque::new();
+        let packet_queue: VecDeque<TimestampedPacket> = VecDeque::new();
         let output_frame_length = (1000000.0 / output_fps) as i64;
 
         // Get the first frame and ignore events before it
@@ -234,12 +234,12 @@ impl Reconstructor {
     /// Generates reconstructed images from the next packet of events
     async fn get_more_images(&mut self) -> Result<(), SimpleError> {
         while let Some(p) = self.packet_queue.pop_front() {
-            match FromPrimitive::from_u32(p.stream_id) {
+            match FromPrimitive::from_u32(p.packet.stream_id) {
                 Some(StreamContent::Frame) => {
                     panic!("Unhandled frame?")
                 }
                 Some(StreamContent::Events) => {
-                    self.event_adder.sort_events(p);
+                    self.event_adder.sort_events(p.packet);
                 }
                 _ => {
                     println!("debug 2")
@@ -298,7 +298,7 @@ impl Reconstructor {
 /// Read packets until the next APS frame is reached (inclusive)
 async fn fill_packet_queue_to_frame(
     packet_receiver: &mut PacketReceiver,
-    packet_queue: &mut VecDeque<Packet>,
+    packet_queue: &mut VecDeque<TimestampedPacket>,
     height: i32,
     width: i32,
 ) -> Result<BlurInfo, SimpleError> {
@@ -306,10 +306,10 @@ async fn fill_packet_queue_to_frame(
         match packet_receiver.next().await {
             Some(p) => {
                 if matches!(
-                    FromPrimitive::from_u32(p.stream_id),
+                    FromPrimitive::from_u32(p.packet.stream_id),
                     Some(StreamContent::Frame)
                 ) {
-                    let frame = match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer)
+                    let frame = match aedat::frame_generated::size_prefixed_root_as_frame(&p.packet.buffer)
                     {
                         Ok(result) => result,
                         Err(_) => {
@@ -330,7 +330,7 @@ async fn fill_packet_queue_to_frame(
 
                     break blur_info;
                 } else if matches!(
-                    FromPrimitive::from_u32(p.stream_id),
+                    FromPrimitive::from_u32(p.packet.stream_id),
                     Some(StreamContent::Events)
                 ) {
                     packet_queue.push_back(p);
@@ -343,12 +343,12 @@ async fn fill_packet_queue_to_frame(
     match packet_receiver.next().await {
         Some(p) => {
             if matches!(
-                    FromPrimitive::from_u32(p.stream_id),
+                    FromPrimitive::from_u32(p.packet.stream_id),
                     Some(StreamContent::Events)
                 )
             {
                 packet_queue.push_back(p);
-            } else if p.stream_id == 2 || p.stream_id == 3 {
+            } else if p.packet.stream_id == 2 || p.packet.stream_id == 3 {
                 // Do nothing
             }
             else {
