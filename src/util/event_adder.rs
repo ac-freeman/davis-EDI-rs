@@ -488,7 +488,12 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
                     .0
             });
 
-        let last_interval = interval_start_timestamps.last().unwrap().clone();
+        let mut last_interval = interval_start_timestamps.last().unwrap().clone();
+        if event_adder.deblur_only {
+            assert_eq!(interval_start_timestamps.len(), 1);
+            last_interval.0 += event_adder.interval_t;
+        }
+
         for elem in interval_start_timestamps {
             ret_vec.push(elem.1)
         }
