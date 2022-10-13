@@ -42,15 +42,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut image_8u = Mat::default();
     let write_video = args.write_video != 0;
     loop {
-        match reconstructor.next().await {
+        match reconstructor.next(false).await {
             None => {
                 println!("\nFinished!");
                 break;
             }
-            Some(image) => {
+            Some(image_res) => {
                 frame_count += 1;
-                let image = match image {
-                    Ok(a) => a,
+                let image = match image_res {
+                    Ok((a, _)) => a,
                     Err(_) => {
                         panic!("No image")
                     }

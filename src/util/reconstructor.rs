@@ -16,6 +16,10 @@ use std::io::Write;
 use std::path::Path;
 use std::time::{Duration, Instant};
 use std::{io, mem};
+use aedat::events_generated::Event;
+
+pub type IterVal = (Mat, Option<Vec<Event>>);
+pub type IterRet = Option<Result<IterVal, ReconstructionError>>;
 
 #[derive(Default)]
 pub struct BlurredInput {
@@ -40,6 +44,7 @@ pub struct Reconstructor {
     optimize_controller: bool,
     target_latency: f64,
     mode: String,
+    events_return: Vec<Event>
 }
 
 impl Reconstructor {
@@ -166,7 +171,8 @@ impl Reconstructor {
             optimize_c,
             optimize_controller,
             target_latency,
-            mode
+            mode,
+            events_return: vec![]
         };
         let blur_info = fill_packet_queue_to_frame(
             &mut r.packet_receiver,
@@ -182,10 +188,13 @@ impl Reconstructor {
     }
 
     /// Get the next reconstructed image
-    pub async fn next(&mut self) -> Option<Result<Mat, ReconstructionError>> {
+    pub async fn next(&mut self, with_events: bool) -> IterRet {
+        if with_events {
+            assert!(self.event_adder.deblur_only);
+        }
         return match self.latent_image_queue.pop_front() {
             // If we have a queue of images already, just return the next one
-            Some(image) => Some(Ok(image)),
+            Some(image) => Some(Ok((image, None))),  // TODO: what about event queues?
 
             // Else we need to rebuild the queue
             _ => {
@@ -231,7 +240,11 @@ impl Reconstructor {
                         panic!("No images in the returned queue")
                     }
                     Some(image) => {
-                        return Some(Ok(image));
+                        return match with_events {
+                            true => { Some(Ok((image, Some(self.events_return.clone())))) }
+                            false => { Some(Ok((image, None))) }
+                        }
+
                     }
                 }
             }
@@ -307,6 +320,12 @@ impl Reconstructor {
                     deblur_return.last_interval_start_timestamp;
                 self.latent_image_queue
                     .append(&mut VecDeque::from(deblur_return.ret_vec));
+
+                let mut tmp_vec = vec![];
+                mem::swap(&mut tmp_vec, &mut self.event_adder.event_during_queue);
+                self.events_return = tmp_vec;
+                self.events_return.append(&mut self.event_adder.event_after_queue.clone());//, self.event_adder.event_after_queue];
+
                 self.event_adder.reset_event_queues();
                 self.event_adder.next_blur_info = Some(next_blur_info);
                 self.event_adder.current_c = deblur_return.found_c;

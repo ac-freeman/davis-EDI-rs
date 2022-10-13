@@ -27,10 +27,10 @@ pub struct EventAdder {
     event_before_queue: Vec<Event>,
 
     /// Events occurring during the current blurred image
-    event_during_queue: Vec<Event>,
+    pub(crate) event_during_queue: Vec<Event>,
 
     /// Events occurring after the current blurred image
-    event_after_queue: Vec<Event>,
+    pub(crate) event_after_queue: Vec<Event>,
     height: i32,
     width: i32,
     pub(crate) last_interval_start_timestamp: i64,
@@ -467,6 +467,8 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
             }
         }
 
+
+        // Optimize c just once, relative to the temporal middle of the APS frame
         let new_c = match event_adder.optimize_c {
             true => event_adder
                 .optimize_c(interval_start_timestamps[interval_start_timestamps.len() / 2].0),
