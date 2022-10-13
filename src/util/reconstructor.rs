@@ -38,7 +38,8 @@ pub struct Reconstructor {
     pub output_fps: f64,
     optimize_c: bool,
     optimize_controller: bool,
-    target_latency: f64
+    target_latency: f64,
+    mode: String,
 }
 
 impl Reconstructor {
@@ -82,6 +83,8 @@ impl Reconstructor {
             .unwrap(),
             _ => panic!(""),
         };
+
+        assert!(target_latency > 0.0);
 
         let decoder_1 = match mode.as_str() {
             "file" => {
@@ -162,7 +165,8 @@ impl Reconstructor {
             output_fps,
             optimize_c,
             optimize_controller,
-            target_latency
+            target_latency,
+            mode
         };
         let blur_info = fill_packet_queue_to_frame(
             &mut r.packet_receiver,
@@ -264,16 +268,21 @@ impl Reconstructor {
         println!("  Latency is {}ms", latency);
 
 
-        match (self.optimize_controller, self.optimize_c, latency > self.target_latency as u128, self.event_adder.optimize_c) {
-            (true, true, true, true) => {
+
+        match (self.mode.as_str(), self.optimize_controller, self.optimize_c, latency > self.target_latency as u128, self.event_adder.optimize_c) {
+            ("file", _, _, _, _) => {
+                // Don't do anything, since latency doesn't make sense in this context. (File reads
+                // happen instantaneously)
+            }
+            (_, true, true, true, true) => {
                 println!("DISABLING C-OPTIMIZATION");
                 self.event_adder.optimize_c = false;
             }
-            (true, true, false, false) => {
+            (_, true, true, false, false) => {
                 println!("ENABLING C-OPTIMIZATION");
                 self.event_adder.optimize_c = true;
             }
-            (_, _, _, _) => {}
+            (_, _, _, _, _) => {}
         }
 
         let next_blur_info = match fill_packet_queue_to_frame(
