@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 use std::{io, mem};
 use aedat::events_generated::Event;
 
-pub type IterVal = (Mat, Option<(Vec<Event>, i64)>);
+pub type IterVal = (Mat, Option<(Vec<Event>, i64, i64)>);
 pub type IterRet = Option<Result<IterVal, ReconstructionError>>;
 
 #[derive(Default)]
@@ -130,6 +130,7 @@ impl Reconstructor {
 
         let packet_queue: VecDeque<TimestampedPacket> = VecDeque::new();
         let output_frame_length = (1000000.0 / output_fps) as i64;
+        println!("EDI output frame length: {} microseconds", output_frame_length);
 
         // Get the first frame and ignore events before it
         if decoder_1.is_none() {
@@ -240,8 +241,28 @@ impl Reconstructor {
                         panic!("No images in the returned queue")
                     }
                     Some(image) => {
+                        debug_assert!(self.event_adder.blur_info.as_ref().unwrap().exposure_begin_t
+                        < self.event_adder.last_interval_start_timestamp);
+
+                        debug_assert!( {
+                            let img_dt = (self.event_adder.last_interval_start_timestamp
+                                - self.event_adder.blur_info.as_ref().unwrap().exposure_begin_t);
+                            let img_dt_secs = img_dt as f64 / 1000000.0;
+                            let frame_length_secs = 1.0 / self.output_fps as f64;
+                            img_dt_secs + 0.0001 >= frame_length_secs
+                            && img_dt_secs - 0.0001 <= frame_length_secs
+                        });
+
                         return match with_events {
-                            true => { Some(Ok((image, Some((self.events_return.clone(), self.event_adder.last_interval_start_timestamp))))) }
+                            true => { Some(Ok(
+                                (image,
+                                 Some(
+                                     (self.events_return.clone(),
+                                      self.event_adder.blur_info.as_ref().unwrap().exposure_begin_t,
+                                      self.event_adder.last_interval_start_timestamp)
+                                 )
+                                )
+                            )) }
                             false => { Some(Ok((image, None))) }
                         }
 

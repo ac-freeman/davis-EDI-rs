@@ -406,10 +406,13 @@ impl EventAdder {
 pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
     if let Some(blur_info) = &event_adder.blur_info {
         // The beginning time for interval 0. Probably before the blurred image exposure beginning time
-        let interval_beginning_start =
-            ((blur_info.exposure_begin_t) / event_adder.interval_t) * event_adder.interval_t;
+        // TODO: Why? Events outside the exposure time aren't included then...
+        // let interval_beginning_start =
+        //     ((blur_info.exposure_begin_t) / event_adder.interval_t) * event_adder.interval_t;
+        let interval_beginning_start = blur_info.exposure_begin_t;
         let interval_end_start =
-            ((blur_info.exposure_end_t) / event_adder.interval_t) * event_adder.interval_t;
+            // ((blur_info.exposure_end_t) / event_adder.interval_t) * event_adder.interval_t;
+            blur_info.exposure_end_t;
         let mut ret_vec = Vec::with_capacity(
             ((interval_end_start - interval_beginning_start) / event_adder.interval_t) as usize * 2,
         );
@@ -519,7 +522,7 @@ use opencv::imgproc::{sobel, threshold, THRESH_BINARY};
 
 pub struct BlurInfo {
     pub blurred_image: OMatrix<f64, Dynamic, Dynamic>,
-    exposure_begin_t: i64,
+    pub exposure_begin_t: i64,
     pub exposure_end_t: i64,
     pub init: bool, // TODO: not very rusty
     pub packet_timestamp: Instant
