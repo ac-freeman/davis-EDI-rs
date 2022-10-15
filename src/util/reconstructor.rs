@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 use std::{io, mem};
 use aedat::events_generated::Event;
 
-pub type IterVal = (Mat, Option<(Vec<Event>, i64, i64)>);
+pub type IterVal = (Mat, Option<(f64, Vec<Event>, i64, i64)>);
 pub type IterRet = Option<Result<IterVal, ReconstructionError>>;
 
 #[derive(Default)]
@@ -257,7 +257,8 @@ impl Reconstructor {
                             true => { Some(Ok(
                                 (image,
                                  Some(
-                                     (self.events_return.clone(),
+                                     (self.event_adder.current_c,
+                                      self.events_return.clone(),
                                       self.event_adder.blur_info.as_ref().unwrap().exposure_begin_t,
                                       self.event_adder.last_interval_start_timestamp)
                                  )
