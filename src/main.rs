@@ -50,7 +50,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Some(image_res) => {
                 frame_count += 1;
                 let image = match image_res {
-                    Ok((a, _)) => a,
+                    Ok((a, _packet_ts, _)) => a,
                     Err(_) => {
                         panic!("No image")
                     }

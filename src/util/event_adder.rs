@@ -59,7 +59,7 @@ impl EventAdder {
         create_continuous(height as i32, width as i32, CV_64F, &mut continuous_mat).unwrap();
         EventAdder {
             interval_t: output_frame_length,
-            event_before_queue: Vec::new(),
+            event_before_queue:Vec::new(),
             event_during_queue: Vec::new(),
             event_after_queue: Vec::new(),
             height: height as i32,
@@ -95,6 +95,7 @@ impl EventAdder {
         };
 
         for event in event_arr {
+
             match event.t() {
                 a if a < blur_info.exposure_begin_t => {
                     self.event_before_queue.push(*event);
