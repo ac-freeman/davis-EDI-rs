@@ -63,8 +63,11 @@ impl Reconstructor {
         mut width: u16,
         mut height: u16,
         deblur_only: bool,
+        events_only: bool,
         target_latency: f64,
     ) -> Reconstructor {
+
+        // assert!(!(deblur_only && events_only));
         let mut decoder_0 = match mode.as_str() {
             "file" => {
                 Decoder::new_from_file(Path::new(&(directory.clone() + "/" + &aedat_filename_0)))
@@ -166,6 +169,7 @@ impl Reconstructor {
                 start_c,
                 optimize_c,
                 deblur_only,
+                events_only
             ),
             latent_image_queue: Default::default(),
             output_fps,

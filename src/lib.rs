@@ -36,6 +36,9 @@ pub struct Args {
     #[clap(long, default_value_t = 1)]
     pub deblur_only: i32,
 
+    #[clap(long, default_value_t = 1)]
+    pub events_only: i32,
+
     /// The target maximum latency (in milliseconds) between an APS frame packet being decoded from the camera, and
     /// deblurring it.
     #[clap(short, long, default_value_t = 200.0)]

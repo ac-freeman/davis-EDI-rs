@@ -40,6 +40,7 @@ pub struct EventAdder {
     pub(crate) current_c: f64,
     pub(crate) optimize_c: bool,
     pub(crate) deblur_only: bool,
+    pub(crate) events_only: bool,
 }
 
 unsafe impl Send for EventAdder {}
@@ -53,6 +54,7 @@ impl EventAdder {
         start_c: f64,
         optimize_c: bool,
         deblur_only: bool,
+        events_only: bool
     ) -> EventAdder {
 
         let mut continuous_mat = Mat::default();
@@ -71,6 +73,7 @@ impl EventAdder {
             current_c: start_c,
             optimize_c,
             deblur_only,
+            events_only
         }
     }
 
@@ -97,6 +100,9 @@ impl EventAdder {
         for event in event_arr {
 
             match event.t() {
+                _ if self.events_only => {
+                    self.event_after_queue.push(*event);
+                }
                 a if a < blur_info.exposure_begin_t => {
                     self.event_before_queue.push(*event);
                 }
