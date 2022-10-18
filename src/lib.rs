@@ -29,6 +29,21 @@ pub struct Args {
     #[clap(long, default_value_t = 0.3)]
     pub start_c: f64,
 
+    /// Deblur only? (0=no, 1=yes)
+    /// If yes, then the system will only deblur the APS images, and NOT generate the intermediate
+    /// image frames. This is useful for transcoding to another event representation
+    /// (https://github.com/ac-freeman/adder-codec-rs)
+    #[clap(long, default_value_t = 1)]
+    pub deblur_only: i32,
+
+    #[clap(long, default_value_t = 1)]
+    pub events_only: i32,
+
+    /// The target maximum latency (in milliseconds) between an APS frame packet being decoded from the camera, and
+    /// deblurring it.
+    #[clap(short, long, default_value_t = 200.0)]
+    pub target_latency: f64,
+
     /// Optimize c? (0=no, 1=yes)
     /// If no, then the system will only use the start_c value
     #[clap(long, default_value_t = 1)]

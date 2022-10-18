@@ -1,17 +1,10 @@
-// use crate::reconstructor::{show_display, Reconstructor, Reconstructors, ReconstructionError};
 use aedat::base::ioheader_generated::Compression;
 use clap::Parser;
-use cv_convert::IntoCv;
-use nalgebra::{DMatrix, Dynamic, OMatrix, U2, U3};
-use opencv::core::{Mat, MatTraitConst, MatTraitConstManual, Size, CV_8U};
-use opencv::hub_prelude::VideoWriterTrait;
-use opencv::videoio::VideoWriter;
-use std::error::Error;
-use std::time::Instant;
-
 use davis_edi_rs::util::reconstructor::{show_display, Reconstructor};
 use davis_edi_rs::Args;
-use serde::Deserialize;
+use opencv::core::{Mat, MatTraitConst, MatTraitConstManual, CV_8U};
+use std::error::Error;
+use std::time::Instant;
 use tokio::fs::File;
 use tokio::io::{AsyncWriteExt, BufWriter};
 use tokio::process::Command;
@@ -38,6 +31,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Compression::None,
         346,
         260,
+        args.deblur_only != 0,
+        args.events_only != 0,
+        args.target_latency,
     )
     .await;
     let mut last_time = Instant::now();
@@ -47,15 +43,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut image_8u = Mat::default();
     let write_video = args.write_video != 0;
     loop {
-        match reconstructor.next().await {
+        match reconstructor.next(false).await {
             None => {
                 println!("\nFinished!");
                 break;
             }
-            Some(image) => {
+            Some(image_res) => {
                 frame_count += 1;
-                let image = match image {
-                    Ok(a) => a,
+                let image = match image_res {
+                    Ok((a, _packet_ts, _)) => a,
                     Err(_) => {
                         panic!("No image")
                     }

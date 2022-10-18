@@ -1,9 +1,9 @@
 use crate::util::event_adder::{deblur_image, BlurInfo, EventAdder};
 use aedat::base::{
-    ioheader_generated::Compression, Decoder, Packet, ParseError, Stream, StreamContent,
+    ioheader_generated::Compression, Decoder, ParseError, Stream, StreamContent,
 };
 
-use crate::util::threaded_decoder::{setup_packet_threads, PacketReceiver};
+use crate::util::threaded_decoder::{setup_packet_threads, PacketReceiver, TimestampedPacket};
 use cv_convert::TryFromCv;
 use nalgebra::DMatrix;
 use num_traits::FromPrimitive;
@@ -14,8 +14,12 @@ use simple_error::SimpleError;
 use std::collections::VecDeque;
 use std::io::Write;
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Instant};
 use std::{io, mem};
+use aedat::events_generated::Event;
+
+pub type IterVal = (Mat, Option<Instant>, Option<(f64, Vec<Event>, i64, i64)>);
+pub type IterRet = Option<Result<IterVal, ReconstructionError>>;
 
 #[derive(Default)]
 pub struct BlurredInput {
@@ -32,12 +36,15 @@ pub struct Reconstructor {
     packet_receiver: PacketReceiver,
     pub height: usize,
     pub width: usize,
-    packet_queue: VecDeque<Packet>,
+    packet_queue: VecDeque<TimestampedPacket>,
     event_adder: EventAdder,
     latent_image_queue: VecDeque<Mat>,
     pub output_fps: f64,
     optimize_c: bool,
     optimize_controller: bool,
+    pub target_latency: f64,
+    mode: String,
+    events_return: Vec<Event>
 }
 
 impl Reconstructor {
@@ -55,7 +62,12 @@ impl Reconstructor {
         compression: Compression,
         mut width: u16,
         mut height: u16,
+        deblur_only: bool,
+        events_only: bool,
+        target_latency: f64,
     ) -> Reconstructor {
+
+        // assert!(!(deblur_only && events_only));
         let mut decoder_0 = match mode.as_str() {
             "file" => {
                 Decoder::new_from_file(Path::new(&(directory.clone() + "/" + &aedat_filename_0)))
@@ -79,6 +91,8 @@ impl Reconstructor {
             .unwrap(),
             _ => panic!(""),
         };
+
+        assert!(target_latency > 0.0);
 
         let decoder_1 = match mode.as_str() {
             "file" => {
@@ -117,8 +131,9 @@ impl Reconstructor {
                 .unwrap();
         }
 
-        let packet_queue: VecDeque<Packet> = VecDeque::new();
+        let packet_queue: VecDeque<TimestampedPacket> = VecDeque::new();
         let output_frame_length = (1000000.0 / output_fps) as i64;
+        println!("EDI output frame length: {} microseconds", output_frame_length);
 
         // Get the first frame and ignore events before it
         if decoder_1.is_none() {
@@ -153,11 +168,16 @@ impl Reconstructor {
                 output_frame_length,
                 start_c,
                 optimize_c,
+                deblur_only,
+                events_only
             ),
             latent_image_queue: Default::default(),
             output_fps,
             optimize_c,
-            optimize_controller
+            optimize_controller,
+            target_latency,
+            mode,
+            events_return: vec![]
         };
         let blur_info = fill_packet_queue_to_frame(
             &mut r.packet_receiver,
@@ -173,10 +193,13 @@ impl Reconstructor {
     }
 
     /// Get the next reconstructed image
-    pub async fn next(&mut self) -> Option<Result<Mat, ReconstructionError>> {
+    pub async fn next(&mut self, with_events: bool) -> IterRet {
+        if with_events {
+            assert!(self.event_adder.deblur_only);
+        }
         return match self.latent_image_queue.pop_front() {
             // If we have a queue of images already, just return the next one
-            Some(image) => Some(Ok(image)),
+            Some(image) => Some(Ok((image, None, None))),  // TODO: what about event queues?
 
             // Else we need to rebuild the queue
             _ => {
@@ -209,12 +232,12 @@ impl Reconstructor {
                 if self.optimize_controller && ((1000000.0 / running_fps) as i64 - self.event_adder.interval_t).abs()
                     > 1000000 / 50000
                 {
-                    self.event_adder.interval_t =
-                        (1000000.0 / running_fps).max(1000000.0 / self.output_fps) as i64;
-                    print!(" Target FPS: {}", 1000000 / self.event_adder.interval_t);
-                    self.event_adder.optimize_c = false;
+                    // self.event_adder.interval_t =
+                    //     (1000000.0 / running_fps).max(1000000.0 / self.output_fps) as i64;
+                    // print!(" Target FPS: {}", 1000000 / self.event_adder.interval_t);
+                    // self.event_adder.optimize_c = false;
                 } else {
-                    self.event_adder.optimize_c = self.optimize_c;
+                    // self.event_adder.optimize_c = self.optimize_c;
                 }
                 io::stdout().flush().unwrap();
                 match self.latent_image_queue.pop_front() {
@@ -222,7 +245,35 @@ impl Reconstructor {
                         panic!("No images in the returned queue")
                     }
                     Some(image) => {
-                        return Some(Ok(image));
+                        debug_assert!(self.event_adder.blur_info.as_ref().unwrap().exposure_begin_t
+                        < self.event_adder.last_interval_start_timestamp);
+
+                        debug_assert!( {
+                            let img_dt = self.event_adder.last_interval_start_timestamp
+                                - self.event_adder.blur_info.as_ref().unwrap().exposure_begin_t;
+                            let img_dt_secs = img_dt as f64 / 1000000.0;
+                            let frame_length_secs = 1.0 / self.output_fps as f64;
+                            img_dt_secs + 0.0001 >= frame_length_secs
+                            && img_dt_secs - 0.0001 <= frame_length_secs
+                        });
+
+                        return match with_events {
+                            true => { Some(Ok(
+                                (image,
+                                    Some(self.event_adder.blur_info.as_ref().unwrap().packet_timestamp),
+                                 Some(
+                                     (self.event_adder.current_c,
+                                      self.events_return.clone(),
+                                      self.event_adder.blur_info.as_ref().unwrap().exposure_begin_t,
+                                      self.event_adder.last_interval_start_timestamp)
+                                 )
+                                )
+                            )) }
+                            false => { Some(Ok((image,
+                                                Some(self.event_adder.blur_info.as_ref().unwrap().packet_timestamp),
+                                                None))) }
+                        }
+
                     }
                 }
             }
@@ -232,12 +283,12 @@ impl Reconstructor {
     /// Generates reconstructed images from the next packet of events
     async fn get_more_images(&mut self) -> Result<(), SimpleError> {
         while let Some(p) = self.packet_queue.pop_front() {
-            match FromPrimitive::from_u32(p.stream_id) {
+            match FromPrimitive::from_u32(p.packet.stream_id) {
                 Some(StreamContent::Frame) => {
                     panic!("Unhandled frame?")
                 }
                 Some(StreamContent::Events) => {
-                    self.event_adder.sort_events(p);
+                    self.event_adder.sort_events(p.packet);
                 }
                 _ => {
                     println!("debug 2")
@@ -245,8 +296,6 @@ impl Reconstructor {
             }
         }
 
-        // match async_scoped::TokioScope::scope_and_block(|s| {
-        //     let join_handle = s.spawn(|_| {
         let deblur_res = {
             if self.show_blurred_display {
                 let tmp_blurred_mat =
@@ -256,7 +305,27 @@ impl Reconstructor {
             }
             deblur_image(&self.event_adder)
         };
-        // });
+
+        let latency = (Instant::now() - self.event_adder.blur_info.as_ref().unwrap().packet_timestamp).as_millis();
+        println!("  Latency is {}ms", latency);
+
+
+
+        match (self.mode.as_str(), self.optimize_controller, self.optimize_c, latency > self.target_latency as u128, self.event_adder.optimize_c) {
+            ("file", _, _, _, _) => {
+                // Don't do anything, since latency doesn't make sense in this context. (File reads
+                // happen instantaneously)
+            }
+            (_, true, true, true, true) => {
+                println!("DISABLING C-OPTIMIZATION");
+                self.event_adder.optimize_c = false;
+            }
+            (_, true, true, false, false) => {
+                println!("ENABLING C-OPTIMIZATION");
+                self.event_adder.optimize_c = true;
+            }
+            (_, _, _, _, _) => {}
+        }
 
         let next_blur_info = match fill_packet_queue_to_frame(
             &mut self.packet_receiver,
@@ -270,8 +339,6 @@ impl Reconstructor {
             Err(_) => None,
         };
 
-        // (join_handle.join().unwrap(), next_blur_info)
-        // }) {
         match (deblur_res, next_blur_info) {
             (None, _) => {
                 panic!("No images returned from deblur call")
@@ -282,6 +349,13 @@ impl Reconstructor {
                     deblur_return.last_interval_start_timestamp;
                 self.latent_image_queue
                     .append(&mut VecDeque::from(deblur_return.ret_vec));
+
+                let mut tmp_vec = vec![];
+                mem::swap(&mut tmp_vec, &mut self.event_adder.event_during_queue);
+                self.events_return = tmp_vec;
+
+                    self.events_return.append(&mut self.event_adder.event_after_queue.clone());
+
                 self.event_adder.reset_event_queues();
                 self.event_adder.next_blur_info = Some(next_blur_info);
                 self.event_adder.current_c = deblur_return.found_c;
@@ -296,7 +370,7 @@ impl Reconstructor {
 /// Read packets until the next APS frame is reached (inclusive)
 async fn fill_packet_queue_to_frame(
     packet_receiver: &mut PacketReceiver,
-    packet_queue: &mut VecDeque<Packet>,
+    packet_queue: &mut VecDeque<TimestampedPacket>,
     height: i32,
     width: i32,
 ) -> Result<BlurInfo, SimpleError> {
@@ -304,10 +378,10 @@ async fn fill_packet_queue_to_frame(
         match packet_receiver.next().await {
             Some(p) => {
                 if matches!(
-                    FromPrimitive::from_u32(p.stream_id),
+                    FromPrimitive::from_u32(p.packet.stream_id),
                     Some(StreamContent::Frame)
                 ) {
-                    let frame = match aedat::frame_generated::size_prefixed_root_as_frame(&p.buffer)
+                    let frame = match aedat::frame_generated::size_prefixed_root_as_frame(&p.packet.buffer)
                     {
                         Ok(result) => result,
                         Err(_) => {
@@ -324,11 +398,11 @@ async fn fill_packet_queue_to_frame(
                     }
 
                     let blur_info =
-                        BlurInfo::new(image, frame.exposure_begin_t(), frame.exposure_end_t());
+                        BlurInfo::new(image, frame.exposure_begin_t(), frame.exposure_end_t(), p.timestamp);
 
                     break blur_info;
                 } else if matches!(
-                    FromPrimitive::from_u32(p.stream_id),
+                    FromPrimitive::from_u32(p.packet.stream_id),
                     Some(StreamContent::Events)
                 ) {
                     packet_queue.push_back(p);
@@ -341,12 +415,12 @@ async fn fill_packet_queue_to_frame(
     match packet_receiver.next().await {
         Some(p) => {
             if matches!(
-                    FromPrimitive::from_u32(p.stream_id),
+                    FromPrimitive::from_u32(p.packet.stream_id),
                     Some(StreamContent::Events)
                 )
             {
                 packet_queue.push_back(p);
-            } else if p.stream_id == 2 || p.stream_id == 3 {
+            } else if p.packet.stream_id == 2 || p.packet.stream_id == 3 {
                 // Do nothing
             }
             else {

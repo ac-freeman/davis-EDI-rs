@@ -5,7 +5,7 @@ use nalgebra::{DMatrix, Dynamic, OMatrix};
 use opencv::core::{mean, no_array, normalize, sqrt, sum_elems, ElemMul, Mat, MatExprTraitConst, BORDER_DEFAULT, CV_64F, NORM_MINMAX, create_continuous};
 use std::mem;
 use std::ops::{AddAssign, DivAssign, MulAssign};
-
+use std::time::Instant;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 const FIB: [f64; 22] = [
@@ -27,10 +27,10 @@ pub struct EventAdder {
     event_before_queue: Vec<Event>,
 
     /// Events occurring during the current blurred image
-    event_during_queue: Vec<Event>,
+    pub(crate) event_during_queue: Vec<Event>,
 
     /// Events occurring after the current blurred image
-    event_after_queue: Vec<Event>,
+    pub(crate) event_after_queue: Vec<Event>,
     height: i32,
     width: i32,
     pub(crate) last_interval_start_timestamp: i64,
@@ -39,6 +39,8 @@ pub struct EventAdder {
     pub(crate) next_blur_info: Option<BlurInfo>,
     pub(crate) current_c: f64,
     pub(crate) optimize_c: bool,
+    pub(crate) deblur_only: bool,
+    pub(crate) events_only: bool,
 }
 
 unsafe impl Send for EventAdder {}
@@ -51,13 +53,15 @@ impl EventAdder {
         output_frame_length: i64,
         start_c: f64,
         optimize_c: bool,
+        deblur_only: bool,
+        events_only: bool
     ) -> EventAdder {
 
         let mut continuous_mat = Mat::default();
         create_continuous(height as i32, width as i32, CV_64F, &mut continuous_mat).unwrap();
         EventAdder {
             interval_t: output_frame_length,
-            event_before_queue: Vec::new(),
+            event_before_queue:Vec::new(),
             event_during_queue: Vec::new(),
             event_after_queue: Vec::new(),
             height: height as i32,
@@ -68,6 +72,8 @@ impl EventAdder {
             next_blur_info: Default::default(),
             current_c: start_c,
             optimize_c,
+            deblur_only,
+            events_only
         }
     }
 
@@ -92,7 +98,11 @@ impl EventAdder {
         };
 
         for event in event_arr {
+
             match event.t() {
+                _ if self.events_only => {
+                    self.event_after_queue.push(*event);
+                }
                 a if a < blur_info.exposure_begin_t => {
                     self.event_before_queue.push(*event);
                 }
@@ -403,10 +413,13 @@ impl EventAdder {
 pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
     if let Some(blur_info) = &event_adder.blur_info {
         // The beginning time for interval 0. Probably before the blurred image exposure beginning time
-        let interval_beginning_start =
-            ((blur_info.exposure_begin_t) / event_adder.interval_t) * event_adder.interval_t;
+        // TODO: Why? Events outside the exposure time aren't included then...
+        // let interval_beginning_start =
+        //     ((blur_info.exposure_begin_t) / event_adder.interval_t) * event_adder.interval_t;
+        let interval_beginning_start = blur_info.exposure_begin_t;
         let interval_end_start =
-            ((blur_info.exposure_end_t) / event_adder.interval_t) * event_adder.interval_t;
+            // ((blur_info.exposure_end_t) / event_adder.interval_t) * event_adder.interval_t;
+            blur_info.exposure_end_t;
         let mut ret_vec = Vec::with_capacity(
             ((interval_end_start - interval_beginning_start) / event_adder.interval_t) as usize * 2,
         );
@@ -422,7 +435,7 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
             let mut current_ts =
                 intermediate_interval_start_timestamps[0].0 + event_adder.interval_t;
             loop {
-                if current_ts < interval_beginning_start {
+                if current_ts < interval_beginning_start && !event_adder.deblur_only {
                     intermediate_interval_start_timestamps.push((current_ts, Mat::default()));
                     current_ts += event_adder.interval_t;
                 } else {
@@ -430,7 +443,7 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
                 }
             }
 
-            if !event_adder.event_before_queue.is_empty() {
+            if !event_adder.deblur_only && !event_adder.event_before_queue.is_empty() {
                 intermediate_interval_start_timestamps
                     .par_iter_mut()
                     .for_each(|(timestamp_start, mat)| {
@@ -456,7 +469,7 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
         let mut interval_start_timestamps = vec![(interval_beginning_start, Mat::default(), 0.0)];
         let mut current_ts = interval_beginning_start + event_adder.interval_t;
         loop {
-            if current_ts <= interval_end_start {
+            if current_ts <= interval_end_start && !event_adder.deblur_only {
                 interval_start_timestamps.push((current_ts, Mat::default(), event_adder.current_c));
                 current_ts += event_adder.interval_t;
             } else {
@@ -464,6 +477,8 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
             }
         }
 
+
+        // Optimize c just once, relative to the temporal middle of the APS frame
         let new_c = match event_adder.optimize_c {
             true => event_adder
                 .optimize_c(interval_start_timestamps[interval_start_timestamps.len() / 2].0),
@@ -483,14 +498,15 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
                     .0
             });
 
-        // let mut ret_vec = Vec::with_capacity(interval_start_timestamps.len());
-        // self.last_interval_start_timestamp = interval_start_timestamps.last().unwrap().0;
-        let last_interval = interval_start_timestamps.last().unwrap().clone();
+        let mut last_interval = interval_start_timestamps.last().unwrap().clone();
+        if event_adder.deblur_only {
+            assert_eq!(interval_start_timestamps.len(), 1);
+            last_interval.0 += event_adder.interval_t;
+        }
+
         for elem in interval_start_timestamps {
             ret_vec.push(elem.1)
         }
-
-        // self.latent_image = ret_vec.last().unwrap().clone();
 
         Some(DeblurReturn {
             last_interval_start_timestamp: last_interval.0,
@@ -510,11 +526,13 @@ fn event_polarity_float(event: &Event) -> f64 {
 }
 
 use opencv::imgproc::{sobel, threshold, THRESH_BINARY};
+
 pub struct BlurInfo {
     pub blurred_image: OMatrix<f64, Dynamic, Dynamic>,
-    exposure_begin_t: i64,
+    pub exposure_begin_t: i64,
     pub exposure_end_t: i64,
     pub init: bool, // TODO: not very rusty
+    pub packet_timestamp: Instant
 }
 
 impl BlurInfo {
@@ -522,12 +540,14 @@ impl BlurInfo {
         image: OMatrix<f64, Dynamic, Dynamic>,
         exposure_begin_t: i64,
         exposure_end_t: i64,
+        packet_timestamp: Instant
     ) -> BlurInfo {
         BlurInfo {
             blurred_image: image,
             exposure_begin_t,
             exposure_end_t,
             init: true,
+            packet_timestamp
         }
     }
 }
