@@ -14,7 +14,7 @@ use simple_error::SimpleError;
 use std::collections::VecDeque;
 use std::io::Write;
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::{Instant};
 use std::{io, mem};
 use aedat::events_generated::Event;
 
@@ -249,8 +249,8 @@ impl Reconstructor {
                         < self.event_adder.last_interval_start_timestamp);
 
                         debug_assert!( {
-                            let img_dt = (self.event_adder.last_interval_start_timestamp
-                                - self.event_adder.blur_info.as_ref().unwrap().exposure_begin_t);
+                            let img_dt = self.event_adder.last_interval_start_timestamp
+                                - self.event_adder.blur_info.as_ref().unwrap().exposure_begin_t;
                             let img_dt_secs = img_dt as f64 / 1000000.0;
                             let frame_length_secs = 1.0 / self.output_fps as f64;
                             img_dt_secs + 0.0001 >= frame_length_secs
