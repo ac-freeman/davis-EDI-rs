@@ -65,6 +65,7 @@ impl Reconstructor {
         deblur_only: bool,
         events_only: bool,
         target_latency: f64,
+        simulate_latency: bool,
     ) -> Reconstructor {
 
         // assert!(!(deblur_only && events_only));
@@ -158,7 +159,7 @@ impl Reconstructor {
         let mut r = Reconstructor {
             show_display: display,
             show_blurred_display: blurred_display,
-            packet_receiver: setup_packet_threads(decoder_0, decoder_1),
+            packet_receiver: setup_packet_threads(decoder_0, decoder_1, simulate_latency),
             height: height as usize,
             width: width as usize,
             packet_queue,

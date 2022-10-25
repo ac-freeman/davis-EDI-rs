@@ -34,6 +34,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         args.deblur_only != 0,
         args.events_only != 0,
         args.target_latency,
+        args.simulate_packet_latency!= 0,
     )
     .await;
     let mut last_time = Instant::now();

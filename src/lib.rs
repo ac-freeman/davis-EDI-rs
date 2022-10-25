@@ -39,8 +39,14 @@ pub struct Args {
     #[clap(long, default_value_t = 1)]
     pub events_only: i32,
 
-    /// The target maximum latency (in milliseconds) between an APS frame packet being decoded from the camera, and
-    /// deblurring it.
+    /// If true (value = 1), then the program simulates the latency of the event packets. This is
+    /// useful when the source is a pre-recorded file, so the packets get ingested at the same rate
+    /// as though they were being produced by a live camera.
+    #[clap(long, default_value_t = 1)]
+    pub simulate_packet_latency: i32,
+
+    /// The target maximum latency (in milliseconds) between an APS frame packet being decoded from
+    /// the camera, and deblurring it.
     #[clap(short, long, default_value_t = 200.0)]
     pub target_latency: f64,
 
