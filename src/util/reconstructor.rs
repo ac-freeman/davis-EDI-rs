@@ -264,17 +264,6 @@ impl Reconstructor {
                         }
                             );
 
-                        // assert!( {
-                        //     let img_dt = self.event_adder.last_interval_start_timestamp
-                        //         - self.event_adder.blur_info.as_ref().unwrap().exposure_begin_t;
-                        //     let img_dt_secs = img_dt as f64 / 1000000.0;
-                        //     let frame_length_secs = 1.0 / self.output_fps as f64;
-                        //     dbg!(img_dt_secs);
-                        //     dbg!(frame_length_secs);
-                        //     img_dt_secs + 0.0001 >= frame_length_secs
-                        //     && img_dt_secs - 0.0001 <= frame_length_secs
-                        // });
-
                         return match with_events {
                             true => { Some(Ok(
                                 (image,
