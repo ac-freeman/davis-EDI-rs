@@ -18,7 +18,7 @@ use std::time::{Instant};
 use std::{io, mem};
 use aedat::events_generated::Event;
 
-pub type IterVal = (Mat, Option<Instant>, Option<(f64, Vec<Event>, i64, i64)>);
+pub type IterVal = (Mat, Option<Instant>, Option<(f64, Vec<Event>, Vec<Event>, i64, i64)>);
 pub type IterRet = Option<Result<IterVal, ReconstructionError>>;
 
 #[derive(Default)]
@@ -44,7 +44,8 @@ pub struct Reconstructor {
     optimize_controller: bool,
     pub target_latency: f64,
     mode: String,
-    events_return: Vec<Event>
+    events_return_before: Vec<Event>,   // Events occurring before the deblurred frame
+    events_return_after: Vec<Event>     // Events occurring during & after the deblurred frame
 }
 
 impl Reconstructor {
@@ -178,7 +179,8 @@ impl Reconstructor {
             optimize_controller,
             target_latency,
             mode,
-            events_return: vec![]
+            events_return_before: vec![],
+            events_return_after: vec![]
         };
         let blur_info = fill_packet_queue_to_frame(
             &mut r.packet_receiver,
@@ -270,7 +272,8 @@ impl Reconstructor {
                                     Some(self.event_adder.blur_info.as_ref().unwrap().packet_timestamp),
                                  Some(
                                      (self.event_adder.current_c,
-                                      self.events_return.clone(),
+                                      self.events_return_before.clone(),
+                                      self.events_return_after.clone(),
                                       self.event_adder.blur_info.as_ref().unwrap().exposure_begin_t,
                                       self.event_adder.last_interval_start_timestamp)
                                  )
@@ -364,11 +367,20 @@ impl Reconstructor {
                 self.latent_image_queue
                     .append(&mut VecDeque::from(deblur_return.ret_vec));
 
-                let mut tmp_vec = vec![];
-                mem::swap(&mut tmp_vec, &mut self.event_adder.event_during_queue);
-                self.events_return = tmp_vec;
+                {
+                    // set the 'return after' queue
+                    let mut tmp_vec = vec![];
+                    mem::swap(&mut tmp_vec, &mut self.event_adder.event_during_queue);
+                    self.events_return_after = tmp_vec;
+                    self.events_return_after.append(&mut self.event_adder.event_after_queue.clone());
+                }
 
-                    self.events_return.append(&mut self.event_adder.event_after_queue.clone());
+                {
+                    // set the 'return before' queue
+                    let mut tmp_vec = vec![];
+                    mem::swap(&mut tmp_vec, &mut self.event_adder.event_before_queue);
+                    self.events_return_before = tmp_vec;
+                }
 
                 self.event_adder.reset_event_queues();
                 self.event_adder.next_blur_info = Some(next_blur_info);

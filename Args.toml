@@ -15,5 +15,5 @@ optimize_c = true
 optimize_controller = false
 show_display = true
 show_blurred_display = true
-output_fps = 500
+output_fps = 1000
 write_video = false
