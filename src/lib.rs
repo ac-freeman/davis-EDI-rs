@@ -29,53 +29,53 @@ pub struct Args {
     #[clap(long, default_value_t = 0.3)]
     pub start_c: f64,
 
-    /// Deblur only? (0=no, 1=yes)
+    /// Deblur only?
     /// If yes, then the system will only deblur the APS images, and NOT generate the intermediate
     /// image frames. This is useful for transcoding to another event representation
     /// (https://github.com/ac-freeman/adder-codec-rs)
-    #[clap(long, default_value_t = 1)]
-    pub deblur_only: i32,
+    #[clap(long, action)]
+    pub deblur_only: bool,
 
-    #[clap(long, default_value_t = 1)]
-    pub events_only: i32,
+    #[clap(long, action)]
+    pub events_only: bool,
 
     /// If true (value = 1), then the program simulates the latency of the event packets. This is
     /// useful when the source is a pre-recorded file, so the packets get ingested at the same rate
     /// as though they were being produced by a live camera.
-    #[clap(long, default_value_t = 1)]
-    pub simulate_packet_latency: i32,
+    #[clap(long, action)]
+    pub simulate_packet_latency: bool,
 
     /// The target maximum latency (in milliseconds) between an APS frame packet being decoded from
     /// the camera, and deblurring it.
     #[clap(short, long, default_value_t = 200.0)]
     pub target_latency: f64,
 
-    /// Optimize c? (0=no, 1=yes)
+    /// Optimize c?
     /// If no, then the system will only use the start_c value
-    #[clap(long, default_value_t = 1)]
-    pub optimize_c: i32,
+    #[clap(long, action)]
+    pub optimize_c: bool,
 
-    /// Enable the optimization controller? (0=no, 1=yes)
+    /// Enable the optimization controller?
     /// If no, then the system will maintain a constant reconstruction frame rate, and may fall
     /// behind real time. If yes, then the controller will adjust the reconstruction rate and
     /// c optimization frequency to try to maintain real-time performance.
-    #[clap(long, default_value_t = 1)]
-    pub optimize_controller: i32,
+    #[clap(long, action)]
+    pub optimize_controller: bool,
 
-    /// Show live view display? (0=no, 1=yes)
-    #[clap(short, long, default_value_t = 1)]
-    pub show_display: i32,
+    /// Show live view display?
+    #[clap(short, long, action)]
+    pub show_display: bool,
 
-    /// Show live view display for the blurry input APS images? (0=no, 1=yes)
-    #[clap(long, default_value_t = 0)]
-    pub show_blurred_display: i32,
+    /// Show live view display for the blurry input APS images?
+    #[clap(long, action)]
+    pub show_blurred_display: bool,
 
     /// Output frames per second. Assume that the input file has microsecond subdivision,
     /// i.e., 1000000 ticks per second. Then each output frame will constitute 1000000/[FPS] ticks
     #[clap(short, long, default_value_t = 100.0)]
     pub output_fps: f64,
 
-    /// Write out framed video reconstruction? (0=no, 1=yes)
-    #[clap(long, default_value_t = 0)]
-    pub write_video: i32,
+    /// Write out framed video reconstruction?
+    #[clap(long, action)]
+    pub write_video: bool,
 }

@@ -23,18 +23,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
         args.events_filename_1,
         args.mode,
         args.start_c,
-        args.optimize_c != 0,
-        args.optimize_controller != 0,
-        args.show_display != 0,
-        args.show_blurred_display != 0,
+        args.optimize_c,
+        args.optimize_controller,
+        args.show_display,
+        args.show_blurred_display,
         args.output_fps,
         Compression::None,
         346,
         260,
-        args.deblur_only != 0,
-        args.events_only != 0,
+        args.deblur_only,
+        args.events_only,
         args.target_latency,
-        args.simulate_packet_latency!= 0,
+        args.simulate_packet_latency,
     )
     .await;
     let mut last_time = Instant::now();
@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut frame_count = 0;
     let mut video_writer = BufWriter::new(File::create("./tmp.gray8").await.unwrap());
     let mut image_8u = Mat::default();
-    let write_video = args.write_video != 0;
+    let write_video = args.write_video;
     loop {
         match reconstructor.next(false).await {
             None => {

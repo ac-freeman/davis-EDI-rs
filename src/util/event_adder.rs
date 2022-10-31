@@ -24,7 +24,7 @@ pub struct EventAdder {
     pub(crate) interval_t: i64,
 
     /// Events occurring before the current blurred image
-    event_before_queue: Vec<Event>,
+    pub(crate) event_before_queue: Vec<Event>,
 
     /// Events occurring during the current blurred image
     pub(crate) event_during_queue: Vec<Event>,
