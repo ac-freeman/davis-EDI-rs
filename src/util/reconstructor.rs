@@ -16,6 +16,7 @@ use std::io::Write;
 use std::path::Path;
 use std::time::{Instant};
 use std::{io, mem};
+use std::cmp::max;
 use aedat::events_generated::Event;
 
 pub type IterVal = (Mat, Option<Instant>, Option<(f64, Vec<Event>, Vec<Event>, i64, i64)>);
@@ -192,8 +193,8 @@ impl Reconstructor {
         .unwrap();
 
         let frame_exp_dt = blur_info.exposure_end_t - blur_info.exposure_begin_t;
-        if frame_exp_dt < r.event_adder.interval_t {
-            r.event_adder.interval_t = frame_exp_dt;
+        if frame_exp_dt < r.event_adder.interval_t && r.event_adder.deblur_only {
+            r.event_adder.interval_t = max(frame_exp_dt, 1);
             r.output_fps = 1.0e6 / frame_exp_dt as f64;
         }
         r.event_adder.blur_info = Some(blur_info);
@@ -347,8 +348,8 @@ impl Reconstructor {
         {
             Ok(blur_info) => {
                 let frame_exp_dt = blur_info.exposure_end_t - blur_info.exposure_begin_t;
-                if frame_exp_dt < self.event_adder.interval_t {
-                    self.event_adder.interval_t = frame_exp_dt;
+                if frame_exp_dt < self.event_adder.interval_t && self.event_adder.deblur_only {
+                    self.event_adder.interval_t = max(frame_exp_dt, 1);
                     self.output_fps = 1.0e6 / frame_exp_dt as f64;
                 }
                 Some(blur_info)},

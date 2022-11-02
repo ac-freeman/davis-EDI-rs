@@ -461,8 +461,9 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
         ////////////////////////
 
         // Naturally handle the case where the input image is relatively sharp
-        if interval_beginning_start >= blur_info.exposure_end_t {
-            panic!("Bad interval")
+        if interval_beginning_start > blur_info.exposure_end_t {
+            println!("Bad interval");
+            return None
         }
 
         // Make a vec of these timestamps so we can iterate them concurrently
