@@ -346,8 +346,9 @@ impl Reconstructor {
                         .unwrap();
                 _show_display_force("blurred input", &tmp_blurred_mat, 1, false);
             }
-            deblur_image(&self.event_adder)
+            deblur_image(&mut self.event_adder)
         };
+        self.output_fps = 1e6 / self.event_adder.interval_t as f64;
 
         let latency = (Instant::now()
             - self

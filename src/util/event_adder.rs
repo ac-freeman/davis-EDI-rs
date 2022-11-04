@@ -411,7 +411,7 @@ impl EventAdder {
     }
 }
 
-pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
+pub fn deblur_image(event_adder: &mut EventAdder) -> Option<DeblurReturn> {
     if let Some(blur_info) = &event_adder.blur_info {
         // The beginning time for interval 0. Probably before the blurred image exposure beginning time
         // TODO: Why? Events outside the exposure time aren't included then...
@@ -421,6 +421,11 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
         let interval_end_start =
             // ((blur_info.exposure_end_t) / event_adder.interval_t) * event_adder.interval_t;
             blur_info.exposure_end_t;
+        if event_adder.interval_t > 1000000/50 {
+            event_adder.interval_t = 1000000/50;
+            // event_adder.optimize_c = false;
+            // eprintln!("Changing interval_t to {}", event_adder.interval_t );
+        }
         let mut ret_vec = Vec::with_capacity(
             ((interval_end_start - interval_beginning_start) / event_adder.interval_t) as usize * 2,
         );
