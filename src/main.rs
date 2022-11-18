@@ -40,7 +40,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut last_time = Instant::now();
     let first_time = last_time;
     let mut frame_count = 0;
-    let mut video_writer = BufWriter::new(File::create("./tmp.gray8").await.unwrap());
+    let mut video_writer = BufWriter::new(File::create("/mnt/tmp/tmp.gray8").await.unwrap());
     let mut image_8u = Mat::default();
     let write_video = args.write_video;
     loop {
@@ -112,13 +112,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 "-r",
                 "30",
                 "-i",
-                "./tmp.gray8",
+                "/mnt/tmp/tmp.gray8",
                 "-crf",
                 "0",
                 "-c:v",
                 "libx264",
                 "-y",
-                "./output_file.mp4",
+                "/mnt/tmp/output_file.mp4",
             ])
             .output()
             .await
