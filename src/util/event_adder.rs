@@ -2,11 +2,14 @@ use aedat::base::Packet;
 use aedat::events_generated::Event;
 use cv_convert::TryFromCv;
 use nalgebra::{DMatrix, Dynamic, OMatrix};
-use opencv::core::{mean, no_array, normalize, sqrt, sum_elems, ElemMul, Mat, MatExprTraitConst, BORDER_DEFAULT, CV_64F, NORM_MINMAX, create_continuous};
+use opencv::core::{
+    create_continuous, mean, no_array, normalize, sqrt, sum_elems, ElemMul, Mat, MatExprTraitConst,
+    BORDER_DEFAULT, CV_64F, NORM_MINMAX,
+};
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use std::mem;
 use std::ops::{AddAssign, DivAssign, MulAssign};
 use std::time::Instant;
-use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 const FIB: [f64; 22] = [
     1.0, 1.0, 2.0, 3.0, 5.0, 8.0, 13.0, 21.0, 34.0, 55.0, 89.0, 144.0, 233.0, 377.0, 610.0, 987.0,
@@ -21,7 +24,7 @@ pub struct DeblurReturn {
 
 pub struct EventAdder {
     /// The time span of each reconstructed frame
-    pub(crate) interval_t: i64,
+    pub interval_t: i64,
 
     /// Events occurring before the current blurred image
     pub(crate) event_before_queue: Vec<Event>,
@@ -54,14 +57,13 @@ impl EventAdder {
         start_c: f64,
         optimize_c: bool,
         deblur_only: bool,
-        events_only: bool
+        events_only: bool,
     ) -> EventAdder {
-
         let mut continuous_mat = Mat::default();
         create_continuous(height as i32, width as i32, CV_64F, &mut continuous_mat).unwrap();
         EventAdder {
             interval_t: output_frame_length,
-            event_before_queue:Vec::new(),
+            event_before_queue: Vec::new(),
             event_during_queue: Vec::new(),
             event_after_queue: Vec::new(),
             height: height as i32,
@@ -73,7 +75,7 @@ impl EventAdder {
             current_c: start_c,
             optimize_c,
             deblur_only,
-            events_only
+            events_only,
         }
     }
 
@@ -98,7 +100,6 @@ impl EventAdder {
         };
 
         for event in event_arr {
-
             match event.t() {
                 _ if self.events_only => {
                     self.event_after_queue.push(*event);
@@ -461,8 +462,9 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
         ////////////////////////
 
         // Naturally handle the case where the input image is relatively sharp
-        if interval_beginning_start >= blur_info.exposure_end_t {
-            panic!("Bad interval")
+        if interval_beginning_start > blur_info.exposure_end_t {
+            println!("Bad interval");
+            return None;
         }
 
         // Make a vec of these timestamps so we can iterate them concurrently
@@ -476,7 +478,6 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
                 break;
             }
         }
-
 
         // Optimize c just once, relative to the temporal middle of the APS frame
         let new_c = match event_adder.optimize_c {
@@ -532,7 +533,7 @@ pub struct BlurInfo {
     pub exposure_begin_t: i64,
     pub exposure_end_t: i64,
     pub init: bool, // TODO: not very rusty
-    pub packet_timestamp: Instant
+    pub packet_timestamp: Instant,
 }
 
 impl BlurInfo {
@@ -540,14 +541,14 @@ impl BlurInfo {
         image: OMatrix<f64, Dynamic, Dynamic>,
         exposure_begin_t: i64,
         exposure_end_t: i64,
-        packet_timestamp: Instant
+        packet_timestamp: Instant,
     ) -> BlurInfo {
         BlurInfo {
             blurred_image: image,
             exposure_begin_t,
             exposure_end_t,
             init: true,
-            packet_timestamp
+            packet_timestamp,
         }
     }
 }
