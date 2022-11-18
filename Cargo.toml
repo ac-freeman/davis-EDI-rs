@@ -1,6 +1,6 @@
 [package]
 name = "davis-edi-rs"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 authors = ["Andrew C. Freeman"]
 description = "A fast, Rust-based, open-source implementation of the paper \"Bringing a Blurry Frame Alive at High Frame-Rate with an Event Camera\" (2019) by Pan et al."
