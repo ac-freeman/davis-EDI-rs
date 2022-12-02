@@ -93,7 +93,7 @@ impl Reconstructor {
                 height,
             )
             .unwrap(),
-            _ => panic!(""),
+            _ => panic!("Invalid source mode"),
         };
 
         assert!(target_latency > 0.0);
@@ -123,7 +123,7 @@ impl Reconstructor {
                 )
                 .unwrap(),
             ),
-            _ => panic!(""),
+            _ => panic!("Invalid source mode"),
         };
 
         let mut event_counter = Mat::default();
@@ -204,6 +204,11 @@ impl Reconstructor {
         r.event_adder.blur_info = Some(blur_info);
 
         r
+    }
+
+    pub fn set_optimize_c(&mut self, optimize: bool) {
+        self.optimize_c = optimize;
+        self.event_adder.optimize_c = optimize;
     }
 
     /// Get the next reconstructed image
