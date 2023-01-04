@@ -51,8 +51,8 @@ unsafe impl Sync for EventAdder {}
 
 impl EventAdder {
     pub fn new(
-        height: usize,
-        width: usize,
+        height: u16,
+        width: u16,
         output_frame_length: i64,
         start_c: f64,
         optimize_c: bool,
