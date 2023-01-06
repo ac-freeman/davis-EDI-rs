@@ -37,8 +37,8 @@ pub struct Reconstructor {
     show_display: bool,
     show_blurred_display: bool,
     packet_receiver: PacketReceiver,
-    pub height: usize,
-    pub width: usize,
+    pub height: u16,
+    pub width: u16,
     packet_queue: VecDeque<TimestampedPacket>,
     pub event_adder: EventAdder,
     latent_image_queue: VecDeque<Mat>,
@@ -166,12 +166,12 @@ impl Reconstructor {
             show_display: display,
             show_blurred_display: blurred_display,
             packet_receiver: setup_packet_threads(decoder_0, decoder_1, simulate_latency),
-            height: height as usize,
-            width: width as usize,
+            height,
+            width,
             packet_queue,
             event_adder: EventAdder::new(
-                height as usize,
-                width as usize,
+                height,
+                width,
                 output_frame_length,
                 start_c,
                 optimize_c,
@@ -265,6 +265,7 @@ impl Reconstructor {
                         panic!("No images in the returned queue")
                     }
                     Some(image) => {
+                        // TODO: handle error
                         debug_assert!(
                             self.event_adder
                                 .blur_info
