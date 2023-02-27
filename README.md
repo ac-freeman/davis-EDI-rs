@@ -26,7 +26,7 @@ You can also deblur the data coming straight from a camera, in real time! I've p
 
 `--show-display`: Whether or not to show a live view of the reconstruction, using OpenCV display windows.
 
-`--write-video`: If true, writes the reconstructed frames to an .mp4 file.
+`--write-video`: If true, writes the reconstructed frames to an .avi file.
 
 `--optimize-c`: If true, will dynamically choose the optimal contrast threshold for deblurring each frame. Causes a significant slow down, especially for higher frame-rate inputs, and can make the reconstruction perform slightly less than real time. If false, then the `--start-c` value provided will be the contrast threshold used for deblurring all frames.
 
