@@ -2,12 +2,11 @@ use aedat::base::ioheader_generated::Compression;
 use clap::Parser;
 use davis_edi_rs::util::reconstructor::{show_display, Reconstructor};
 use davis_edi_rs::Args;
-use opencv::core::{Mat, MatTraitConst, MatTraitConstManual, CV_8U};
+use opencv::core::{Mat, MatTraitConst, CV_8U};
 use std::error::Error;
 use std::time::Instant;
-use tokio::fs::File;
-use tokio::io::{AsyncWriteExt, BufWriter};
-use tokio::process::Command;
+use opencv::videoio::VideoWriter;
+use opencv::prelude::VideoWriterTrait;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -40,9 +39,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut last_time = Instant::now();
     let first_time = last_time;
     let mut frame_count = 0;
-    let mut video_writer = BufWriter::new(File::create("/mnt/tmp/tmp.gray8").await.unwrap());
     let mut image_8u = Mat::default();
     let write_video = args.write_video;
+
+    // /mnt/tmp is a mounted ramdisk, eg.:
+    // sudo mount -t tmpfs -o rw,size=20G tmpfs /mnt/tmp
+    let mut cv_video_writer = VideoWriter::new(
+        "/mnt/tmp/tmp.avi",
+        opencv::videoio::VideoWriter::fourcc('M' as i8, 'J' as i8, 'P' as i8, 'G' as i8).unwrap(),
+        30.0,
+        opencv::core::Size::new(reconstructor.width as i32, reconstructor.height as i32),
+        false,
+    )?;
     loop {
         match reconstructor.next(false).await {
             None => {
@@ -58,10 +66,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     }
                 };
 
-                image
-                    .clone()
-                    .convert_to(&mut image_8u, CV_8U, 255.0, 0.0)
-                    .unwrap();
+                if write_video {
+                    image
+                        .clone()
+                        .convert_to(&mut image_8u, CV_8U, 255.0, 0.0)
+                        .unwrap();
+                    cv_video_writer.write(&image_8u)?;
+                }
 
                 // Don't refresh the window more than 60 Hz
                 if (Instant::now() - last_time).as_millis() > args.output_fps as u128 / 60 {
@@ -74,18 +85,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         break;
                     };
                 }
-
-                if write_video {
-                    unsafe {
-                        for idx in 0..(reconstructor.height * reconstructor.width) as i32 {
-                            let val: *const u8 = image_8u.at_unchecked(idx).unwrap() as *const u8;
-                            video_writer
-                                .write(std::slice::from_raw_parts(val, 1))
-                                .await
-                                .unwrap();
-                        }
-                    }
-                }
             }
         }
     }
@@ -95,34 +94,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         (Instant::now() - first_time).as_secs(),
         frame_count as f32 / (Instant::now() - first_time).as_secs_f32()
     );
-    video_writer.flush().await.unwrap();
-    drop(video_writer);
+    cv_video_writer.release()?;
+    drop(cv_video_writer);
 
-    if write_video {
-        // ffmpeg -f rawvideo -pix_fmt gray -s:v 346x260 -r 60 -i ./tmp.gray8 -crf 0 -c:v libx264 ./output_file.mp4
-        println!("Writing reconstruction as .mp4 with ffmpeg");
-        Command::new("ffmpeg")
-            .args(&[
-                "-f",
-                "rawvideo",
-                "-pix_fmt",
-                "gray",
-                "-s:v",
-                "346x260",
-                "-r",
-                "30",
-                "-i",
-                "/mnt/tmp/tmp.gray8",
-                "-crf",
-                "0",
-                "-c:v",
-                "libx264",
-                "-y",
-                "/mnt/tmp/output_file.mp4",
-            ])
-            .output()
-            .await
-            .expect("failed to execute process");
-    }
     Ok(())
 }
