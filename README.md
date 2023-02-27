@@ -50,3 +50,6 @@ There are some major things left before I can start implementing mEDI. Any assis
 - Cargo
 - OpenCV and its Rust bindings (installation instructions [here](https://github.com/twistedfall/opencv-rust))
 - Other dependencies will download and install automatically when building with Cargo
+
+## Compatibilitity
+I've only tested on Ubuntu 20.04. If you go to the effort of getting things running on Windows, let me know what the additional requirements are and I'll add them here. Eventually I'll get a full Windows/Linux/Mac CI pipeline setup.
