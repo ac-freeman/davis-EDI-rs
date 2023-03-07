@@ -1,4 +1,3 @@
-use aedat::base::ioheader_generated::Compression;
 use clap::Parser;
 use davis_edi_rs::util::reconstructor::{show_display, Reconstructor};
 use davis_edi_rs::Args;
@@ -28,9 +27,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         args.show_display,
         args.show_blurred_display,
         args.output_fps,
-        Compression::None,
-        346,
-        260,
         args.deblur_only,
         args.events_only,
         args.target_latency,
