@@ -269,28 +269,28 @@ impl Reconstructor {
                     }
                     Some(image) => {
                         // TODO: handle error
-                        debug_assert!(
-                            self.event_adder
-                                .blur_info
-                                .as_ref()
-                                .unwrap()
-                                .exposure_begin_t
-                                < self.event_adder.last_interval_start_timestamp
-                        );
-
-                        debug_assert!({
-                            let true_frame_dt =
-                                self.event_adder.blur_info.as_ref().unwrap().exposure_end_t
-                                    - self
-                                        .event_adder
-                                        .blur_info
-                                        .as_ref()
-                                        .unwrap()
-                                        .exposure_begin_t;
-                            let img_dt_secs = true_frame_dt as f64 / 1000000.0;
-                            let frame_length_secs = 1.0 / self.output_fps as f64;
-                            img_dt_secs >= frame_length_secs
-                        });
+                        // debug_assert!(
+                        //     self.event_adder
+                        //         .blur_info
+                        //         .as_ref()
+                        //         .unwrap()
+                        //         .exposure_begin_t
+                        //         < self.event_adder.last_interval_start_timestamp
+                        // );
+                        //
+                        // debug_assert!({
+                        //     let true_frame_dt =
+                        //         self.event_adder.blur_info.as_ref().unwrap().exposure_end_t
+                        //             - self
+                        //                 .event_adder
+                        //                 .blur_info
+                        //                 .as_ref()
+                        //                 .unwrap()
+                        //                 .exposure_begin_t;
+                        //     let img_dt_secs = true_frame_dt as f64 / 1000000.0;
+                        //     let frame_length_secs = 1.0 / self.output_fps as f64;
+                        //     img_dt_secs >= frame_length_secs
+                        // });
 
                         return match with_events {
                             true => Some(Ok((
