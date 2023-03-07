@@ -26,6 +26,8 @@ pub struct EventAdder {
     /// The time span of each reconstructed frame
     pub interval_t: i64,
 
+    interval_count: u32,
+
     /// Events occurring before the current blurred image
     pub(crate) event_before_queue: Vec<Event>,
 
@@ -42,6 +44,7 @@ pub struct EventAdder {
     pub(crate) next_blur_info: Option<BlurInfo>,
     pub(crate) current_c: f64,
     pub(crate) optimize_c: bool,
+    pub(crate) optimize_c_frequency: u32,
     pub(crate) deblur_only: bool,
     pub(crate) events_only: bool,
 }
@@ -56,6 +59,7 @@ impl EventAdder {
         output_frame_length: i64,
         start_c: f64,
         optimize_c: bool,
+        optimize_c_frequency: u32,
         deblur_only: bool,
         events_only: bool,
     ) -> EventAdder {
@@ -63,6 +67,7 @@ impl EventAdder {
         create_continuous(height as i32, width as i32, CV_64F, &mut continuous_mat).unwrap();
         EventAdder {
             interval_t: output_frame_length,
+            interval_count: 0,
             event_before_queue: Vec::new(),
             event_during_queue: Vec::new(),
             event_after_queue: Vec::new(),
@@ -74,6 +79,7 @@ impl EventAdder {
             next_blur_info: Default::default(),
             current_c: start_c,
             optimize_c,
+            optimize_c_frequency,
             deblur_only,
             events_only,
         }
@@ -411,8 +417,9 @@ impl EventAdder {
     }
 }
 
-pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
+pub fn deblur_image(event_adder: &mut EventAdder) -> Option<DeblurReturn> {
     if let Some(blur_info) = &event_adder.blur_info {
+        event_adder.interval_count += 1;
         // The beginning time for interval 0. Probably before the blurred image exposure beginning time
         // TODO: Why? Events outside the exposure time aren't included then...
         // let interval_beginning_start =
@@ -480,9 +487,14 @@ pub fn deblur_image(event_adder: &EventAdder) -> Option<DeblurReturn> {
         }
 
         // Optimize c just once, relative to the temporal middle of the APS frame
-        let new_c = match event_adder.optimize_c {
-            true => event_adder
-                .optimize_c(interval_start_timestamps[interval_start_timestamps.len() / 2].0),
+        let new_c = match event_adder.optimize_c
+            && event_adder.interval_count % event_adder.optimize_c_frequency == 0
+        {
+            true => {
+                event_adder.interval_count = 0;
+                event_adder
+                    .optimize_c(interval_start_timestamps[interval_start_timestamps.len() / 2].0)
+            }
             false => event_adder.current_c,
         };
 

@@ -59,6 +59,7 @@ impl Reconstructor {
         mode: String,
         start_c: f64,
         optimize_c: bool,
+        optimize_c_frequency: u32,
         optimize_controller: bool,
         display: bool,
         blurred_display: bool,
@@ -175,6 +176,7 @@ impl Reconstructor {
                 output_frame_length,
                 start_c,
                 optimize_c,
+                optimize_c_frequency,
                 deblur_only,
                 events_only,
             ),
@@ -206,9 +208,10 @@ impl Reconstructor {
         r
     }
 
-    pub fn set_optimize_c(&mut self, optimize: bool) {
+    pub fn set_optimize_c(&mut self, optimize: bool, frequency: u32) {
         self.optimize_c = optimize;
         self.event_adder.optimize_c = optimize;
+        self.event_adder.optimize_c_frequency = frequency;
     }
 
     /// Get the next reconstructed image
@@ -352,7 +355,7 @@ impl Reconstructor {
                         .unwrap();
                 _show_display_force("blurred input", &tmp_blurred_mat, 1, false);
             }
-            deblur_image(&self.event_adder)
+            deblur_image(&mut self.event_adder)
         };
 
         let latency = (Instant::now()

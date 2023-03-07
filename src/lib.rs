@@ -55,6 +55,9 @@ pub struct Args {
     #[clap(long, action)]
     pub optimize_c: bool,
 
+    #[clap(long, default_value_t = 1)]
+    pub optimize_c_frequency: u32,
+
     /// Enable the optimization controller?
     /// If no, then the system will maintain a constant reconstruction frame rate, and may fall
     /// behind real time. If yes, then the controller will adjust the reconstruction rate and

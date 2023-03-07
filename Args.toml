@@ -12,6 +12,7 @@ events_only = false
 simulate_packet_latency = true
 target_latency = 500.0
 optimize_c = true
+optimize_c_frequency = 10
 optimize_controller = false
 show_display = true
 show_blurred_display = false

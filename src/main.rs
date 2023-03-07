@@ -3,10 +3,10 @@ use clap::Parser;
 use davis_edi_rs::util::reconstructor::{show_display, Reconstructor};
 use davis_edi_rs::Args;
 use opencv::core::{Mat, MatTraitConst, CV_8U};
+use opencv::prelude::VideoWriterTrait;
+use opencv::videoio::VideoWriter;
 use std::error::Error;
 use std::time::Instant;
-use opencv::videoio::VideoWriter;
-use opencv::prelude::VideoWriterTrait;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -23,6 +23,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         args.mode,
         args.start_c,
         args.optimize_c,
+        args.optimize_c_frequency,
         args.optimize_controller,
         args.show_display,
         args.show_blurred_display,
