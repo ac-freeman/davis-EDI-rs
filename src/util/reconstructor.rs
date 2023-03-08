@@ -1,5 +1,5 @@
 use crate::util::event_adder::{deblur_image, BlurInfo, EventAdder};
-use aedat::base::{ioheader_generated::Compression, Decoder, ParseError, Stream, StreamContent};
+use aedat::base::{Decoder, ParseError, Stream, StreamContent};
 
 use crate::util::threaded_decoder::{setup_packet_threads, PacketReceiver, TimestampedPacket};
 use aedat::events_generated::Event;
@@ -64,9 +64,6 @@ impl Reconstructor {
         display: bool,
         blurred_display: bool,
         output_fps: f64,
-        compression: Compression,
-        mut width: u16,
-        mut height: u16,
         deblur_only: bool,
         events_only: bool,
         target_latency: f64,
@@ -80,47 +77,32 @@ impl Reconstructor {
             }
             "socket" => Decoder::new_from_unix_stream(
                 Path::new(&(directory.clone() + "/" + &aedat_filename_0)),
-                StreamContent::Events,
-                compression,
-                width,
-                height,
             )
             .unwrap(),
             "tcp" => Decoder::new_from_tcp_stream(
                 &(directory.clone() + "/" + &aedat_filename_0),
-                StreamContent::Events,
-                compression,
-                width,
-                height,
             )
             .unwrap(),
             _ => panic!("Invalid source mode"),
         };
 
         assert!(target_latency > 0.0);
+        let (height, width) = split_camera_info(&decoder_0.id_to_stream[&0]);
 
         let decoder_1 = match mode.as_str() {
             "file" => {
-                (height, width) = split_camera_info(&decoder_0.id_to_stream[&0]);
+
                 None
             }
             "socket" => Some(
                 Decoder::new_from_unix_stream(
                     Path::new(&(directory + "/" + &aedat_filename_1)),
-                    StreamContent::Frame,
-                    compression,
-                    width,
-                    height,
                 )
                 .unwrap(),
             ),
             "tcp" => Some(
                 Decoder::new_from_tcp_stream(
                     &(directory + "/" + &aedat_filename_1),
-                    StreamContent::Frame,
-                    compression,
-                    width,
-                    height,
                 )
                 .unwrap(),
             ),
