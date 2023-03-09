@@ -16,11 +16,13 @@ use std::io::Write;
 use std::path::Path;
 use std::time::Instant;
 use std::{io, mem};
+use thiserror::Error;
 
 pub type IterVal = (
     Mat,
     Option<Instant>,
     Option<(f64, Vec<Event>, Vec<Event>, i64, i64)>,
+    Option<u128>,
 );
 pub type IterRet = Option<Result<IterVal, ReconstructionError>>;
 
@@ -51,6 +53,16 @@ pub struct Reconstructor {
     events_return_after: Vec<Event>,  // Events occurring during & after the deblurred frame
 }
 
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum ReconstructorError {
+    #[error("Parse error")]
+    ParseError(#[from] ParseError),
+
+    #[error("OpenCV error")]
+    OpenCVError(#[from] opencv::Error),
+}
+
 impl Reconstructor {
     pub async fn new(
         directory: String,
@@ -68,21 +80,18 @@ impl Reconstructor {
         events_only: bool,
         target_latency: f64,
         simulate_latency: bool,
-    ) -> Reconstructor {
+    ) -> Result<Reconstructor, ReconstructorError> {
         // assert!(!(deblur_only && events_only));
         let mut decoder_0 = match mode.as_str() {
             "file" => {
-                Decoder::new_from_file(Path::new(&(directory.clone() + "/" + &aedat_filename_0)))
-                    .unwrap()
+                Decoder::new_from_file(Path::new(&(directory.clone() + "/" + &aedat_filename_0)))?
             }
-            "socket" => Decoder::new_from_unix_stream(
-                Path::new(&(directory.clone() + "/" + &aedat_filename_0)),
-            )
-            .unwrap(),
-            "tcp" => Decoder::new_from_tcp_stream(
+            "socket" => Decoder::new_from_unix_stream(Path::new(
                 &(directory.clone() + "/" + &aedat_filename_0),
-            )
+            ))
             .unwrap(),
+            "tcp" => Decoder::new_from_tcp_stream(&(directory.clone() + "/" + &aedat_filename_0))
+                .unwrap(),
             _ => panic!("Invalid source mode"),
         };
 
@@ -90,22 +99,13 @@ impl Reconstructor {
         let (height, width) = split_camera_info(&decoder_0.id_to_stream[&0]);
 
         let decoder_1 = match mode.as_str() {
-            "file" => {
-
-                None
-            }
-            "socket" => Some(
-                Decoder::new_from_unix_stream(
-                    Path::new(&(directory + "/" + &aedat_filename_1)),
-                )
-                .unwrap(),
-            ),
-            "tcp" => Some(
-                Decoder::new_from_tcp_stream(
-                    &(directory + "/" + &aedat_filename_1),
-                )
-                .unwrap(),
-            ),
+            "file" => None,
+            "socket" => Some(Decoder::new_from_unix_stream(Path::new(
+                &(directory + "/" + &aedat_filename_1),
+            ))?),
+            "tcp" => Some(Decoder::new_from_tcp_stream(
+                &(directory + "/" + &aedat_filename_1),
+            )?),
             _ => panic!("Invalid source mode"),
         };
 
@@ -113,9 +113,7 @@ impl Reconstructor {
 
         // Signed integers, to allow for negative polarities dominating the interval
         unsafe {
-            event_counter
-                .create_rows_cols(height as i32, width as i32, CV_8S)
-                .unwrap();
+            event_counter.create_rows_cols(height as i32, width as i32, CV_8S)?;
         }
 
         let packet_queue: VecDeque<TimestampedPacket> = VecDeque::new();
@@ -187,7 +185,7 @@ impl Reconstructor {
         }
         r.event_adder.blur_info = Some(blur_info);
 
-        r
+        Ok(r)
     }
 
     pub fn set_optimize_c(&mut self, optimize: bool, frequency: u32) {
@@ -203,7 +201,7 @@ impl Reconstructor {
         }
         return match self.latent_image_queue.pop_front() {
             // If we have a queue of images already, just return the next one
-            Some(image) => Some(Ok((image, None, None))), // TODO: what about event queues?
+            Some(image) => Some(Ok((image, None, None, None))), // TODO: what about event queues?
 
             // Else we need to rebuild the queue
             _ => {
@@ -218,8 +216,8 @@ impl Reconstructor {
                 }
 
                 // let join_handle: thread::JoinHandle<_> = thread::spawn(|| {
-                match self.get_more_images().await {
-                    Ok(_) => {}
+                let latency = match self.get_more_images().await {
+                    Ok(a) => a,
                     Err(_) => return None,
                 };
                 // });
@@ -295,6 +293,7 @@ impl Reconstructor {
                                         .exposure_begin_t,
                                     self.event_adder.last_interval_start_timestamp,
                                 )),
+                                Some(latency),
                             ))),
                             false => Some(Ok((
                                 image,
@@ -306,6 +305,7 @@ impl Reconstructor {
                                         .packet_timestamp,
                                 ),
                                 None,
+                                Some(latency),
                             ))),
                         };
                     }
@@ -315,7 +315,7 @@ impl Reconstructor {
     }
 
     /// Generates reconstructed images from the next packet of events
-    async fn get_more_images(&mut self) -> Result<(), SimpleError> {
+    async fn get_more_images(&mut self) -> Result<u128, SimpleError> {
         while let Some(p) = self.packet_queue.pop_front() {
             match FromPrimitive::from_u32(p.packet.stream_id) {
                 Some(StreamContent::Frame) => {
@@ -429,7 +429,7 @@ impl Reconstructor {
             _ => return Err(SimpleError::new("End of aedat file")),
         };
 
-        Ok(())
+        Ok(latency)
     }
 }
 

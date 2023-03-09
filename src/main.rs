@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         args.target_latency,
         args.simulate_packet_latency,
     )
-    .await;
+    .await?;
     let mut last_time = Instant::now();
     let first_time = last_time;
     let mut frame_count = 0;
@@ -57,7 +57,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Some(image_res) => {
                 frame_count += 1;
                 let image = match image_res {
-                    Ok((a, _packet_ts, _)) => a,
+                    Ok((a, _packet_ts, _, _)) => a,
                     Err(_) => {
                         panic!("No image")
                     }
