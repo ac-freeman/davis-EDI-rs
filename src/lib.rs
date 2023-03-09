@@ -3,6 +3,9 @@ pub mod util;
 use clap::Parser;
 use serde::Deserialize;
 
+// Export the aedat dependency for use in other crates
+pub use aedat;
+
 #[derive(Parser, Debug, Deserialize, Default)]
 pub struct Args {
     /// Filename for args (optional; must be in .toml format)

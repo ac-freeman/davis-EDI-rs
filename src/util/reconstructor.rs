@@ -1,6 +1,7 @@
 use crate::util::event_adder::{deblur_image, BlurInfo, EventAdder};
 use aedat::base::{Decoder, ParseError, Stream, StreamContent};
 
+use crate::util::reconstructor::ReconstructorError::ArgumentError;
 use crate::util::threaded_decoder::{setup_packet_threads, PacketReceiver, TimestampedPacket};
 use aedat::events_generated::Event;
 use cv_convert::TryFromCv;
@@ -61,6 +62,9 @@ pub enum ReconstructorError {
 
     #[error("OpenCV error")]
     OpenCVError(#[from] opencv::Error),
+
+    #[error("Argument error: `{0}`")]
+    ArgumentError(String),
 }
 
 impl Reconstructor {
@@ -88,11 +92,9 @@ impl Reconstructor {
             }
             "socket" => Decoder::new_from_unix_stream(Path::new(
                 &(directory.clone() + "/" + &aedat_filename_0),
-            ))
-            .unwrap(),
-            "tcp" => Decoder::new_from_tcp_stream(&(directory.clone() + "/" + &aedat_filename_0))
-                .unwrap(),
-            _ => panic!("Invalid source mode"),
+            ))?,
+            "tcp" => Decoder::new_from_tcp_stream(&(directory.clone() + "/" + &aedat_filename_0))?,
+            _ => return Err(ArgumentError("Invalid source mode".to_string())),
         };
 
         assert!(target_latency > 0.0);
@@ -106,7 +108,7 @@ impl Reconstructor {
             "tcp" => Some(Decoder::new_from_tcp_stream(
                 &(directory + "/" + &aedat_filename_1),
             )?),
-            _ => panic!("Invalid source mode"),
+            _ => return Err(ArgumentError("Invalid source mode".to_string())),
         };
 
         let mut event_counter = Mat::default();
