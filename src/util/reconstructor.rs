@@ -495,7 +495,7 @@ async fn fill_packet_queue_to_frame(
             } else if p.packet.stream_id == 2 || p.packet.stream_id == 3 {
                 // Do nothing
             } else {
-                panic!("TODO handle sparse events")
+                return Err(SimpleError::new("TODO handle sparse events"));
             }
         }
         None => return Err(SimpleError::new("End of aedat file")),
