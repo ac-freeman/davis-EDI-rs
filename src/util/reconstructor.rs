@@ -421,7 +421,6 @@ impl Reconstructor {
                     // set the 'return before' queue
                     let mut tmp_vec = vec![];
                     mem::swap(&mut tmp_vec, &mut self.event_adder.event_before_queue);
-                    let tmp = tmp_vec.len();
                     self.events_return_before = tmp_vec;
                 }
 
