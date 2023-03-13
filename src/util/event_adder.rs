@@ -107,9 +107,6 @@ impl EventAdder {
 
         for event in event_arr {
             match event.t() {
-                // _ if self.events_only => {
-                //     self.event_after_queue.push(*event);
-                // }
                 a if a < blur_info.exposure_begin_t => {
                     self.event_before_queue.push(*event);
                 }
