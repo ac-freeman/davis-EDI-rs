@@ -18,7 +18,6 @@ clap = { version = "4.0.17", features = ["derive"] }
 rayon = "1.5"
 toml = "0.5.8"
 aedat = "1.3.1"
-#aedat = {path = "../aedat-rs"}
 serde = {version = "1.0.136", features = ["derive"]}
 simple-error = "0.2.3"
 thiserror = "1.0.38"
@@ -47,3 +46,4 @@ features = [
 
 [profile.release]
 lto = true
+opt-level = 3
