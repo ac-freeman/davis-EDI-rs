@@ -1,6 +1,6 @@
 [package]
 name = "davis-edi-rs"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["Andrew C. Freeman"]
 description = "A fast, Rust-based, open-source implementation of the paper \"Bringing a Blurry Frame Alive at High Frame-Rate with an Event Camera\" (2019) by Pan et al."
@@ -17,9 +17,11 @@ opencv = "0.66.0"
 clap = { version = "4.0.17", features = ["derive"] }
 rayon = "1.5"
 toml = "0.5.8"
-aedat = "1.2.8"
+#aedat = "1.2.8"
+aedat = {path = "../aedat-rs"}
 serde = {version = "1.0.136", features = ["derive"]}
 simple-error = "0.2.3"
+thiserror = "1.0.38"
 crossbeam = "0.8.2"
 crossbeam-utils = "0.8.11"
 nalgebra = "0.31.1"

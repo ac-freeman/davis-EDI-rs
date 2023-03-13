@@ -107,9 +107,6 @@ impl EventAdder {
 
         for event in event_arr {
             match event.t() {
-                _ if self.events_only => {
-                    self.event_after_queue.push(*event);
-                }
                 a if a < blur_info.exposure_begin_t => {
                     self.event_before_queue.push(*event);
                 }
@@ -127,6 +124,7 @@ impl EventAdder {
         mem::swap(&mut self.event_before_queue, &mut self.event_after_queue);
         self.event_after_queue.clear();
         self.event_during_queue.clear();
+        // self.event_before_queue.clear();
     }
 
     fn get_intermediate_image(&self, c: f64, timestamp_start: i64) -> Mat {
