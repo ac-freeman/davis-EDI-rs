@@ -13,7 +13,7 @@ categories = ["multimedia::encoding", "science"]
 exclude = ["dataset", "**/*.gif"]
 
 [dependencies]
-opencv = "0.66.0"
+opencv = "0.82.0"
 clap = { version = "4.0.17", features = ["derive"] }
 rayon = "1.5"
 toml = "0.5.8"
