@@ -13,17 +13,17 @@ categories = ["multimedia::encoding", "science"]
 exclude = ["dataset", "**/*.gif"]
 
 [dependencies]
-opencv = "0.82.0"
+opencv = "0.76.4"
 clap = { version = "4.0.17", features = ["derive"] }
 rayon = "1.5"
 toml = "0.5.8"
-aedat = "1.3.1"
+aedat = { git = "https://github.com/eric-unc/aedat-rs.git", version = "1.3.2"}
 serde = {version = "1.0.136", features = ["derive"]}
 simple-error = "0.2.3"
 thiserror = "1.0.38"
 crossbeam = "0.8.2"
 crossbeam-utils = "0.8.11"
-nalgebra = "0.31.1"
+nalgebra = "0.32.2"
 byteorder = "1.4.3"
 tokio = { version = "1.21.1", features = ["full"] }
 num-traits = "0.2.15"
@@ -33,10 +33,10 @@ async-trait = "0.1.57"
 
 
 [dependencies.cv-convert]
-version = '0.20.0'
+version = '0.22.0'
 features = [
-    'opencv_0-66',
-    'nalgebra_0-31'
+    'opencv_0-76',
+    'nalgebra_0-32'
 ]
 
 # For debugging aedat-rs usage

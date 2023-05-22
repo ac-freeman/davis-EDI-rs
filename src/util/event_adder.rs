@@ -1,7 +1,7 @@
 use aedat::base::Packet;
 use aedat::events_generated::Event;
 use cv_convert::TryFromCv;
-use nalgebra::{DMatrix, Dynamic, OMatrix};
+use nalgebra::{DMatrix, Dyn, OMatrix};
 use opencv::core::{
     create_continuous, mean, no_array, normalize, sqrt, sum_elems, ElemMul, Mat, MatExprTraitConst,
     BORDER_DEFAULT, CV_64F, NORM_MINMAX,
@@ -539,7 +539,7 @@ fn event_polarity_float(event: &Event) -> f64 {
 use opencv::imgproc::{sobel, threshold, THRESH_BINARY};
 
 pub struct BlurInfo {
-    pub blurred_image: OMatrix<f64, Dynamic, Dynamic>,
+    pub blurred_image: OMatrix<f64, Dyn, Dyn>,
     pub exposure_begin_t: i64,
     pub exposure_end_t: i64,
     pub init: bool, // TODO: not very rusty
@@ -548,7 +548,7 @@ pub struct BlurInfo {
 
 impl BlurInfo {
     pub fn new(
-        image: OMatrix<f64, Dynamic, Dynamic>,
+        image: OMatrix<f64, Dyn, Dyn>,
         exposure_begin_t: i64,
         exposure_end_t: i64,
         packet_timestamp: Instant,

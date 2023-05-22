@@ -51,8 +51,8 @@ There are some major things left before I can start implementing mEDI. Any assis
 - OpenCV and its Rust bindings (installation instructions [here](https://github.com/twistedfall/opencv-rust))
 - Other dependencies will download and install automatically when building with Cargo
 
-## Compatibilitity
-I've only tested on Ubuntu 20.04, using dv-gui 1.6 for piping live camera data. If you go to the effort of getting things running on Windows, let me know what the additional requirements are and I'll add them here. Eventually I'll get a full Windows/Linux/Mac CI pipeline setup.
+## Compatibility
+I've only tested on Ubuntu 20.04, using dv-gui 1.6 for piping live camera data. The default `Args.toml` won't work on Windows because it uses Unix sockets, but it could probably work through files or TCP. Eventually I'll get a full Windows/Linux/Mac CI pipeline setup.
 
 ## Release notes
 ### v0.2.0, 2023-03-08
