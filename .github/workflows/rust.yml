@@ -60,9 +60,11 @@ jobs:
 
       - name: Install LLVM/clang
         run: choco install -y llvm --version "$LLVM_VERSION"
+        shell: bash
 
       - name: Install OpenCV
         run: choco install -y opencv --version "OPENCV_VERSION"
+        shell: bash
 
       - name: Set environmental variables
         run: |
@@ -72,6 +74,7 @@ jobs:
           export OPENCV_LINK_PATHS="/C/tools/opencv/build/x64/vc15/lib"
           export OPENCV_LINK_LIBS="opencv_world${OPENCV_VERSION//./}"
           export OPENCV_INCLUDE_PATHS="/C/tools/opencv/build/include"
+        shell: bash
 
       - name: Check project
         run: cargo check
