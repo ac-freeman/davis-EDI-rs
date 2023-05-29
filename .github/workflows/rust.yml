@@ -40,12 +40,15 @@ jobs:
       - name: Check project
         run: cargo check
 
-      - name: Build binaries for testing
+      - name: Build binary
         run: cargo build
 
   check_windows:
     name: Build on Windows
     runs-on: windows-2022
+    env:
+      LLVM_VERSION: 15.0.7
+      OPENCV_VERSION: 4.7.0
     steps:
       - uses: actions/checkout@v2
 
@@ -56,13 +59,22 @@ jobs:
           override: true
 
       - name: Install LLVM/clang
-        run: choco install -y llvm --version 16.0.1
+        run: choco install -y llvm --version "$LLVM_VERSION"
 
       - name: Install OpenCV
-        run: choco install -y opencv --version 4.5.4
+        run: choco install -y opencv --version "OPENCV_VERSION"
+
+      - name: Set environmental variables
+        run: |
+          export PATH="/C/Program Files/LLVM/bin:$PATH"
+          export LIBCLANG_PATH="/C/Program Files/LLVM/bin"
+          export PATH="/C/tools/opencv/build/x64/vc15/bin:$PATH"
+          export OPENCV_LINK_PATHS="/C/tools/opencv/build/x64/vc15/lib"
+          export OPENCV_LINK_LIBS="opencv_world${OPENCV_VERSION//./}"
+          export OPENCV_INCLUDE_PATHS="/C/tools/opencv/build/include"
 
       - name: Check project
         run: cargo check
 
-      - name: Build binaries for testing
+      - name: Build binary
         run: cargo build
