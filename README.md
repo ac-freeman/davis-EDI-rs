@@ -52,7 +52,7 @@ There are some major things left before I can start implementing mEDI. Any assis
 - Other dependencies will download and install automatically when building with Cargo
 
 ## Compatibility
-I've only tested on Ubuntu 20.04, using dv-gui 1.6 for piping live camera data. The default `Args.toml` won't work on Windows because it uses Unix sockets, but it could probably work through files or TCP. Eventually I'll get a full Windows/Linux/Mac CI pipeline setup.
+Only tested on Ubuntu 20.04, using dv-gui 1.6 for piping live camera data. The default `Args.toml` won't work on Windows because it uses Unix sockets, but it could probably work through files or TCP. Builds on both Ubuntu and Windows as demonstrated through CI (macOS yet to be tested).
 
 ## Release notes
 ### v0.2.0, 2023-03-08
