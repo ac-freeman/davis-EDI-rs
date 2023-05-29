@@ -63,7 +63,7 @@ jobs:
         shell: bash
 
       - name: Install OpenCV
-        run: choco install -y opencv --version "OPENCV_VERSION"
+        run: choco install -y opencv --version "$OPENCV_VERSION"
         shell: bash
 
       - name: Set environmental variables
