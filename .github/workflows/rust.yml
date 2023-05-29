@@ -48,7 +48,7 @@ jobs:
     runs-on: windows-2022
     env:
       LLVM_VERSION: 15.0.7
-      OPENCV_VERSION: 4.7.0
+      OPENCV_VERSION: 4.6.0
     steps:
       - uses: actions/checkout@v2
 
