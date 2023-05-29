@@ -66,7 +66,7 @@ jobs:
         run: choco install -y opencv --version "$OPENCV_VERSION"
         shell: bash
 
-      - name: Set environmental variables
+      - name: Build binary
         run: |
           export PATH="/C/Program Files/LLVM/bin:$PATH"
           export LIBCLANG_PATH="/C/Program Files/LLVM/bin"
@@ -74,12 +74,5 @@ jobs:
           export OPENCV_LINK_PATHS="/C/tools/opencv/build/x64/vc15/lib"
           export OPENCV_LINK_LIBS="opencv_world${OPENCV_VERSION//./}"
           export OPENCV_INCLUDE_PATHS="/C/tools/opencv/build/include"
-        shell: bash
-
-      - name: Check project
-        run: cargo check
-        shell: bash
-
-      - name: Build binary
-        run: cargo build
+          cargo build
         shell: bash
