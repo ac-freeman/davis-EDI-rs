@@ -43,7 +43,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // sudo mount -t tmpfs -o rw,size=20G tmpfs /mnt/tmp
     let mut cv_video_writer = VideoWriter::new(
         "/mnt/tmp/tmp.avi",
-        opencv::videoio::VideoWriter::fourcc('M' as i8, 'J' as i8, 'P' as i8, 'G' as i8).unwrap(),
+        opencv::videoio::VideoWriter::fourcc('M', 'J', 'P', 'G').unwrap(),
         30.0,
         opencv::core::Size::new(reconstructor.width as i32, reconstructor.height as i32),
         false,

@@ -90,6 +90,7 @@ impl Reconstructor {
             "file" => {
                 Decoder::new_from_file(Path::new(&(directory.clone() + "/" + &aedat_filename_0)))?
             }
+            #[cfg(target_family = "unix")]
             "socket" => Decoder::new_from_unix_stream(Path::new(
                 &(directory.clone() + "/" + &aedat_filename_0),
             ))?,
@@ -102,6 +103,7 @@ impl Reconstructor {
 
         let decoder_1 = match mode.as_str() {
             "file" => None,
+            #[cfg(target_family = "unix")]
             "socket" => Some(Decoder::new_from_unix_stream(Path::new(
                 &(directory + "/" + &aedat_filename_1),
             ))?),
