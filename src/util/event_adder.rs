@@ -22,6 +22,7 @@ pub struct DeblurReturn {
     pub(crate) found_c: f64,
 }
 
+#[allow(dead_code)]
 pub struct EventAdder {
     /// The time span of each reconstructed frame
     pub interval_t: i64,
