@@ -13,7 +13,7 @@ categories = ["multimedia::encoding", "science"]
 exclude = ["dataset", "**/*.gif"]
 
 [dependencies]
-opencv = "0.76.4"
+opencv = "0.84.5"
 clap = { version = "4.0.17", features = ["derive"] }
 rayon = "1.5"
 toml = "0.5.8"
@@ -33,10 +33,10 @@ async-trait = "0.1.57"
 
 
 [dependencies.cv-convert]
-version = '0.22.0'
+version = '0.24.1'
 default-features = false
 features = [
-    'opencv_0-76',
+    'opencv_0-84',
     'nalgebra_0-32'
 ]
 
