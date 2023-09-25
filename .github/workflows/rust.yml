@@ -47,7 +47,7 @@ jobs:
     name: Build on Windows
     runs-on: windows-2022
     env:
-      LLVM_VERSION: 15.0.7
+      LLVM_VERSION: 16.0.6
       OPENCV_VERSION: 4.6.0
     steps:
       - uses: actions/checkout@v2
