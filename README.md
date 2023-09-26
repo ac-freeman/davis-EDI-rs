@@ -55,6 +55,8 @@ There are some major things left before I can start implementing mEDI. Any assis
 Only tested on Ubuntu 20.04, using dv-gui 1.6 for piping live camera data. The default `Args.toml` won't work on Windows because it uses Unix sockets, but it could probably work through files or TCP. Builds on both Ubuntu and Windows as demonstrated through CI (macOS yet to be tested).
 
 ## Release notes
+### v0.2.3, 2023-09-26
+- [x] Update the OpenCV dependency version
 ### v0.2.0, 2023-03-08
 - [x] Update `aedat-rs` dependency for socketed/TCP connections with dv-gui v1.6. This is a breaking (but good) change, as dv-gui added an IO header to the beginning of each packet.
 
