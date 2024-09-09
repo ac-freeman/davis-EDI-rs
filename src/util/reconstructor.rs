@@ -4,10 +4,10 @@ use aedat::base::{Decoder, ParseError, Stream, StreamContent};
 use crate::util::reconstructor::ReconstructorError::ArgumentError;
 use crate::util::threaded_decoder::{setup_packet_threads, PacketReceiver, TimestampedPacket};
 use aedat::events_generated::Event;
-use cv_convert::TryFromCv;
-use nalgebra::DMatrix;
+// use cv_convert::TryFromCv;
+use nalgebra::{DMatrix, Dyn, OMatrix};
 use num_traits::FromPrimitive;
-use opencv::core::{Mat, MatTrait, MatTraitConst, Size, CV_8S, NORM_MINMAX};
+use opencv::core::{Mat, MatTrait, MatTraitConst, Size, CV_64F, CV_8S, NORM_MINMAX};
 use opencv::highgui;
 use opencv::imgproc::resize;
 use simple_error::SimpleError;
@@ -66,6 +66,8 @@ pub enum ReconstructorError {
     #[error("Argument error: `{0}`")]
     ArgumentError(String),
 }
+
+
 
 impl Reconstructor {
     pub async fn new(
@@ -336,9 +338,15 @@ impl Reconstructor {
 
         let deblur_res = {
             if self.show_blurred_display {
+                #[cfg(not(feature ="cv-convert"))]
+                let tmp_blurred_mat = crate::util::omatrix_to_mat(&self.event_adder.blur_info.as_ref().unwrap().blurred_image);
+
+
+                #[cfg(feature ="cv-convert")]
                 let tmp_blurred_mat =
                     Mat::try_from_cv(&self.event_adder.blur_info.as_ref().unwrap().blurred_image)
                         .unwrap();
+
                 _show_display_force("blurred input", &tmp_blurred_mat, 1, false);
             }
             deblur_image(&mut self.event_adder)

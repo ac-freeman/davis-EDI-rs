@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // /mnt/tmp is a mounted ramdisk, eg.:
     // sudo mount -t tmpfs -o rw,size=20G tmpfs /mnt/tmp
     let mut cv_video_writer = VideoWriter::new(
-        "/mnt/tmp/tmp.avi",
+        "~/Downloads/tmp.avi",
         opencv::videoio::VideoWriter::fourcc('M', 'J', 'P', 'G').unwrap(),
         30.0,
         opencv::core::Size::new(reconstructor.width as i32, reconstructor.height as i32),

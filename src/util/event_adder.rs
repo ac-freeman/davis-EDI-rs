@@ -1,6 +1,6 @@
 use aedat::base::Packet;
 use aedat::events_generated::Event;
-use cv_convert::TryFromCv;
+// use cv_convert::TryFromCv;
 use nalgebra::{DMatrix, Dyn, OMatrix};
 use opencv::core::{
     create_continuous, mean, no_array, normalize, sqrt, sum_elems, ElemMul, Mat, MatExprTraitConst,
@@ -158,6 +158,10 @@ impl EventAdder {
         // Take the exp of L^tilde(t) to get L(t), the final latent image
         event_counter.mul_assign(c);
         event_counter = event_counter.map(|x: f64| x.exp());
+        #[cfg(not(feature ="cv-convert"))]
+        let event_counter_mat = crate::util::omatrix_to_mat(&event_counter);
+
+        #[cfg(feature ="cv-convert")]
         let event_counter_mat = Mat::try_from_cv(event_counter).unwrap();
 
         self.latent_image
@@ -304,9 +308,16 @@ impl EventAdder {
         let mut latent_image = DMatrix::<f64>::zeros(self.height as usize, self.width as usize);
         let mut edge_image = latent_image.clone();
         if self.event_during_queue.is_empty() {
+
+            #[cfg(not(feature ="cv-convert"))]
             return (
-                Mat::try_from_cv(self.blur_info.as_ref().unwrap().blurred_image.clone_owned())
-                    .unwrap(),
+                omatrix_to_mat(&self.blur_info.as_ref().unwrap().blurred_image.clone_owned()),
+                omatrix_to_mat(&edge_image),
+            );
+
+            #[cfg(feature ="cv-convert")]
+            return (
+                Mat::try_from_cv(self.blur_info.as_ref().unwrap().blurred_image.clone_owned()).unwrap(),
                 Mat::try_from_cv(edge_image).unwrap(),
             );
         }
@@ -409,6 +420,16 @@ impl EventAdder {
         }
 
         // show_display_force("latent", &latent_image, 1, false);
+        // If the "cv-convert" feature is enabled
+        #[cfg(not(feature ="cv-convert"))]
+        {
+            (
+                omatrix_to_mat(&latent_image),
+                omatrix_to_mat(&edge_image),
+            )
+        }
+
+        #[cfg(feature ="cv-convert")]
         (
             Mat::try_from_cv(latent_image).unwrap(),
             Mat::try_from_cv(edge_image).unwrap(),
@@ -538,6 +559,7 @@ fn event_polarity_float(event: &Event) -> f64 {
 }
 
 use opencv::imgproc::{sobel, threshold, THRESH_BINARY};
+use crate::util::omatrix_to_mat;
 
 pub struct BlurInfo {
     pub blurred_image: OMatrix<f64, Dyn, Dyn>,
