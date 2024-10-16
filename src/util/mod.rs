@@ -17,21 +17,24 @@ fn omatrix_to_mat(omatrix: &OMatrix<f64, Dyn, Dyn>) -> Mat {
 
     unsafe {
         let mat_ptr = mat.ptr_mut(0).unwrap() as *mut f64;
-        let omatrix_ptr = omatrix.transpose().as_slice().as_ptr();
+        // let omatrix_ptr = omatrix.transpose().as_slice().as_ptr();
+
+        let binding = omatrix.transpose();
+        let omatrix_data = binding.as_slice();
 
         let len = (rows * cols) as isize;
         let simd_width = 4; // Number of f64 values processed per SIMD operation
 
         let mut i = 0;
         while i <= len - simd_width {
-            let data = _mm256_loadu_pd(omatrix_ptr.offset(i));
+            let data = _mm256_loadu_pd(&omatrix_data[i as usize]);
             _mm256_storeu_pd(mat_ptr.offset(i), data);
             i += simd_width;
         }
 
         // Handle remaining elements
         while i < len {
-            *mat_ptr.offset(i) = *omatrix_ptr.offset(i);
+            *mat_ptr.offset(i) = omatrix_data[i as usize];
             i += 1;
         }
     }

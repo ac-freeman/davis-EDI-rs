@@ -338,8 +338,9 @@ impl Reconstructor {
 
         let deblur_res = {
             if self.show_blurred_display {
+                dbg!(self.event_adder.blur_info.is_some());
                 #[cfg(not(feature ="cv-convert"))]
-                let tmp_blurred_mat = crate::util::omatrix_to_mat(&self.event_adder.blur_info.as_ref().unwrap().blurred_image);
+                let tmp_blurred_mat = crate::util::omatrix_to_mat(&self.event_adder.blur_info.as_ref().unwrap().blurred_image.clone_owned());
 
 
                 #[cfg(feature ="cv-convert")]
@@ -470,11 +471,13 @@ async fn fill_packet_queue_to_frame(
 
                     let frame_px = frame.pixels().unwrap();
                     let mut image = DMatrix::<f64>::zeros(height as usize, width as usize);
+
                     for (row_idx, mut im_row) in image.row_iter_mut().enumerate() {
                         for (col_idx, im_px) in im_row.iter_mut().enumerate() {
                             *im_px = frame_px[row_idx * width as usize + col_idx] as f64 / 255.0;
                         }
                     }
+                    eprintln!("got blurred image");
 
                     let blur_info = BlurInfo::new(
                         image,

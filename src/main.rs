@@ -41,13 +41,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // /mnt/tmp is a mounted ramdisk, eg.:
     // sudo mount -t tmpfs -o rw,size=20G tmpfs /mnt/tmp
-    let mut cv_video_writer = VideoWriter::new(
-        "~/Downloads/tmp.avi",
-        opencv::videoio::VideoWriter::fourcc('M', 'J', 'P', 'G').unwrap(),
-        30.0,
-        opencv::core::Size::new(reconstructor.width as i32, reconstructor.height as i32),
-        false,
-    )?;
+    // let mut cv_video_writer = VideoWriter::new(
+    //     "~/Downloads/tmp.avi",
+    //     opencv::videoio::VideoWriter::fourcc('M', 'J', 'P', 'G').unwrap(),
+    //     30.0,
+    //     opencv::core::Size::new(reconstructor.width as i32, reconstructor.height as i32),
+    //     false,
+    // )?;
     loop {
         match reconstructor.next(false).await {
             None => {
@@ -63,13 +63,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     }
                 };
 
-                if write_video {
-                    image
-                        .clone()
-                        .convert_to(&mut image_8u, CV_8U, 255.0, 0.0)
-                        .unwrap();
-                    cv_video_writer.write(&image_8u)?;
-                }
+                // if write_video {
+                //     image
+                //         .clone()
+                //         .convert_to(&mut image_8u, CV_8U, 255.0, 0.0)
+                //         .unwrap();
+                //     cv_video_writer.write(&image_8u)?;
+                // }
 
                 // Don't refresh the window more than 60 Hz
                 if (Instant::now() - last_time).as_millis() > args.output_fps as u128 / 60 {
@@ -91,8 +91,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         (Instant::now() - first_time).as_secs(),
         frame_count as f32 / (Instant::now() - first_time).as_secs_f32()
     );
-    cv_video_writer.release()?;
-    drop(cv_video_writer);
+    // cv_video_writer.release()?;
+    // drop(cv_video_writer);
 
     Ok(())
 }
